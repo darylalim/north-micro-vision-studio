@@ -149,6 +149,19 @@ uv run ruff format .
 uv run ty check
 ```
 
+## CI and releases
+
+Every push and pull request runs the checks above, plus a grep for module-scope MLX
+imports, on an Apple Silicon runner — `mlx` ships arm64 macOS wheels only, so there is
+no Linux job. `uv sync --locked` fails the build if `uv.lock` has drifted from
+`pyproject.toml`.
+
+**Bumping `version` in `pyproject.toml` on `main` publishes a GitHub release.** Once CI
+is green the workflow tags that commit, builds notes from the commit subjects since the
+previous tag, and publishes — there is no draft to approve. It refuses a version that is
+not valid PEP 440 or that is not ahead of the highest existing tag, and marks a
+pre-release (`0.2.0rc1`, `0.3.0.dev1`) as such so it does not take the "Latest" badge.
+
 ## Measured on an M2 Max (32 GB)
 
 | | |

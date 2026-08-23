@@ -44,6 +44,21 @@ in `sys.modules`; edits there surface as a stale `ImportError` until you restart
 When working with Python, invoke the relevant `/astral:<skill>` for `uv`, `ty`, and
 `ruff` to ensure best practices are followed.
 
+## CI and releases
+
+`.github/workflows/ci.yml` runs every command above on an Apple Silicon runner, plus the
+module-scope MLX import grep. There is no Linux job and cannot be one: `mlx` ships arm64
+macOS wheels only, so `uv sync --locked` will not resolve on Linux, and `ty` needs
+mlx-vlm importable to check `nmv/model.py`.
+
+**Editing `version` in `pyproject.toml` is a publish action.** On `main`, once CI passes,
+the workflow tags that commit and publishes a GitHub release with notes built from commit
+subjects — there is no draft to approve and no undo that unpublishes a tag others may
+have fetched. Do not bump the version to test something or as an incidental tidy-up; bump
+it when you mean to ship. The workflow refuses a version that is not valid PEP 440 or not
+ahead of the highest existing tag, and marks pre-releases so they do not take "Latest",
+but nothing checks whether you *meant* it.
+
 ## The constraint that shapes the architecture
 
 mlx-vlm builds its generation stream at import time:

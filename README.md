@@ -1,5 +1,7 @@
 # north-micro-vision-studio
 
+[![CI](https://github.com/darylalim/north-micro-vision-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/darylalim/north-micro-vision-studio/actions/workflows/ci.yml)
+
 Streamlit application for research and development using
 [Cohere North Micro Vision](https://huggingface.co/CohereLabs/North-Micro-Vision-Instruct)
 on Apple Silicon with MLX.

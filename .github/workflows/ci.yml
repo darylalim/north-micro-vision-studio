@@ -1,0 +1,133 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # Apple Silicon is not a preference here. mlx publishes arm64 macOS wheels
+    # only, so `uv sync --locked` cannot resolve on Linux, and both tests plus
+    # `ty check` need mlx-vlm importable. Every current macos-* image is Apple
+    # Silicon, so macos-latest is safe on architecture.
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      # --locked fails if uv.lock has drifted from pyproject.toml instead of
+      # quietly re-resolving on the runner. Python comes from .python-version;
+      # uv downloads it. No model weights are fetched -- neither test loads the
+      # checkpoint, so CI never pulls the 5 GB from Hugging Face.
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Format
+        run: uv run ruff format --check .
+
+      - name: Type check
+        run: uv run ty check
+
+      # The invariant the whole architecture rests on: mlx-vlm binds its
+      # thread-local GPU stream to whichever thread imports it, so it may only
+      # be imported inside worker functions. A module-scope import works once
+      # and then dies on Streamlit's next rerun. A local hook catches this while
+      # editing; this catches it in a pull request.
+      - name: No module-scope MLX imports
+        run: |
+          if grep -rnE --include='*.py' \
+            '^from mlx_vlm|^import mlx_vlm|^from mlx\.|^import mlx\b' \
+            nmv/ app_pages/ streamlit_app.py
+          then
+            echo "::error::Module-scope MLX import detected -- move it into the function body (see CLAUDE.md)."
+            exit 1
+          fi
+
+      - name: Resize and token parity with mlx-vlm
+        run: uv run python tests/test_resize_parity.py
+
+      - name: MLX worker survives abandoned streams
+        run: uv run python tests/test_runtime_abandon.py
+
+  # Version bumps open their own release. When pyproject.toml names a version
+  # that has neither a tag nor a release, this opens a DRAFT with auto-generated
+  # notes for you to review and publish.
+  #
+  # Nothing is written to the repository until you press Publish: GitHub does
+  # not create the git tag for a draft release, so a draft you delete leaves no
+  # tag behind. `needs: check` means a draft can only ever appear for a commit
+  # where lint, types and both tests passed.
+  #
+  # There is deliberately no `paths:` filter on pyproject.toml -- GitHub cannot
+  # scope one to a single job, so it would skip CI on every other push. This job
+  # runs each time and exits in seconds once the version is already released.
+  release:
+    needs: check
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read version from pyproject.toml
+        id: version
+        run: |
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Skip versions that are already released
+        id: guard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # Two checks, not one. A pending draft has no tag yet, so testing the
+          # tag alone would open a fresh draft on every later push to main; the
+          # releases listing (which includes drafts for a token with push
+          # access) is what actually makes this idempotent.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "${TAG} is already tagged -- nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          elif gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --jq '.[].tag_name' | grep -Fxq "${TAG}"; then
+            echo "A release for ${TAG} already exists, possibly an unpublished draft -- nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "${TAG} is new."
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open draft release
+        if: steps.guard.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          # --target pins the draft to the exact commit CI passed on, which is
+          # the commit the tag will be cut from when you publish.
+          url=$(gh release create "${TAG}" \
+            --target "${GITHUB_SHA}" \
+            --title "${TAG}" \
+            --draft \
+            --generate-notes)
+          echo "Draft release ready for review: ${url}"
+          echo "Draft release **${TAG}** is ready for review: ${url}" >> "$GITHUB_STEP_SUMMARY"

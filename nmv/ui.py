@@ -107,6 +107,14 @@ def render_stats(slot: DeltaGenerator, stats: RunStats | None) -> None:
     a fresh run can write into it afterwards. Without that, the panel would
     always trail one interaction behind — it would render the *previous* run's
     numbers under a "Last run" heading.
+
+    It is an ``st.empty()`` rather than an ``st.container()`` because this runs
+    twice per interaction: once from ``sidebar()`` carrying the previous run's
+    numbers, then again from the page once generation finishes. ``st.empty()``
+    replaces on write; a container appends, stacking two "Last run" panels.
+    Streamlit's own guidance discourages ``st.empty()`` slots filled after slow
+    work because remounting resets stateful widgets — ``st.metric`` holds no
+    such state, so that hazard does not apply here.
     """
     if stats is None:
         return

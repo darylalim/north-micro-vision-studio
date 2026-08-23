@@ -163,7 +163,6 @@ with details:
                 for index, box in enumerate(boxes)
             ],
             hide_index=True,
-            width="stretch",
         )
     else:
         # Diagnose the actual cause. A response cut off at max_tokens leaves a

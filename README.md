@@ -134,13 +134,14 @@ nmv/model.py              loading, sampling, streaming
 nmv/imaging.py            token budgeting and resizing (no MLX import)
 nmv/grounding.py          0–1000 box parsing and rendering
 nmv/ui.py                 shared sidebar
-tests/test_resize_parity.py
+tests/                    resize/token invariants, worker-abandonment regression
 ```
 
 ## Development
 
 ```bash
 uv run python tests/test_resize_parity.py
+uv run python tests/test_runtime_abandon.py
 uv run ruff check .
 uv run ruff format .
 uv run ty check

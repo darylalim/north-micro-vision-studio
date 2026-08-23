@@ -37,7 +37,26 @@ MIN_PIXELS = 16_384
 MAX_PIXELS = 3_868_706
 MAX_ASPECT_RATIO = 200
 
+# The multimodal context Cohere validated, even though the LM backbone claims
+# 128K. Used to warn when a conversation's accumulated images pass it.
+VALIDATED_CONTEXT_TOKENS = 8192
+
 MEGAPIXEL = 1_000_000
+
+# Upload formats both pages accept. Kept here beside the other encoder
+# constraints so the two pages cannot drift apart.
+IMAGE_TYPES = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"]
+
+# Everything PIL can raise for a corrupt, hostile or unsupported upload.
+# DecompressionBombError descends straight from Exception -- not OSError, not
+# ValueError -- so it must be named explicitly or it escapes the handler and
+# aborts the entire Streamlit script run. (OSError already covers
+# UnidentifiedImageError, and ValueError covers our own AspectRatioError.)
+IMAGE_ERRORS: tuple[type[Exception], ...] = (
+    OSError,
+    ValueError,
+    Image.DecompressionBombError,
+)
 
 
 class AspectRatioError(ValueError):
@@ -96,9 +115,18 @@ class ImagePlan:
         return self.target[0] * self.target[1]
 
     @property
-    def scale(self) -> float:
-        """Linear scale factor applied to the longest edge."""
-        return (self.target_pixels / self.source_pixels) ** 0.5
+    def direction(self) -> str:
+        """``"downscaled"``, ``"upscaled"`` or ``"unchanged"``.
+
+        Not always a downscale: ``smart_resize`` snaps each edge to a multiple
+        of 32 and rounds *up* whenever that still fits the budget, so most
+        uploads whose dimensions are not already multiples of 32 grow slightly.
+        """
+        if self.target_pixels < self.source_pixels:
+            return "downscaled"
+        if self.target_pixels > self.source_pixels:
+            return "upscaled"
+        return "unchanged"
 
 
 def tokens_for(width: int, height: int) -> int:
@@ -120,10 +148,20 @@ def plan(width: int, height: int, budget_pixels: int) -> ImagePlan:
 
     budget = max(MIN_PIXELS, min(int(budget_pixels), MAX_PIXELS))
     new_h, new_w = smart_resize(height, width, max_pixels=budget)
+
+    # We resize before handing the image over, but mlx-vlm still runs its own
+    # pass over whatever it receives — using the *checkpoint's* bounds, not our
+    # budget. A tight budget can land below MIN_PIXELS (a 640x480 at the floor
+    # resolves to 128x96 = 12,288 px), and mlx-vlm then scales it back up.
+    # Model that second pass here, or the size and token count reported to the
+    # user are not the ones the encoder actually sees.
+    final_h, final_w = smart_resize(
+        new_h, new_w, min_pixels=MIN_PIXELS, max_pixels=MAX_PIXELS
+    )
     return ImagePlan(
         source=(width, height),
-        target=(new_w, new_h),
-        tokens=tokens_for(new_w, new_h),
+        target=(final_w, final_h),
+        tokens=tokens_for(final_w, final_h),
         budget_pixels=budget,
     )
 
@@ -140,16 +178,27 @@ def normalize(image: Image.Image) -> Image.Image:
     return image if image.mode == "RGB" else image.convert("RGB")
 
 
-def prepare(image: Image.Image, budget_pixels: int) -> tuple[Image.Image, ImagePlan]:
-    """Normalise orientation and colour, then resize to the token budget.
+def encode(image: Image.Image, budget_pixels: int) -> tuple[Image.Image, ImagePlan]:
+    """Resize an **already normalised** image to the token budget.
 
-    Resizing here rather than letting mlx-vlm do it is safe because
-    ``smart_resize`` is idempotent on dimensions already snapped to 32 and
-    inside the bounds: mlx-vlm's internal pass becomes a no-op, so the
-    resolution reported to the user is exactly the one the model sees.
+    Split out from :func:`prepare` so a caller that needs both the normalised
+    original (to draw overlays on) and the encoded copy does not pay for a
+    second full-resolution normalisation — Pillow's ``exif_transpose`` returns
+    ``image.copy()`` even when there is no orientation tag left to apply, so
+    the second call is a pure memcpy of every pixel.
+
+    Resizing here rather than leaving it to mlx-vlm is safe because
+    :func:`plan` already accounts for mlx-vlm's own pass: its target is a fixed
+    point of ``smart_resize`` under the checkpoint's bounds, so mlx-vlm's
+    internal call is a no-op and the resolution reported to the user is exactly
+    the one the encoder sees. ``tests/test_resize_parity.py`` enforces that.
     """
-    image = normalize(image)
     resolved = plan(image.width, image.height, budget_pixels)
     if resolved.resized:
         image = image.resize(resolved.target, Image.Resampling.BICUBIC)
     return image, resolved
+
+
+def prepare(image: Image.Image, budget_pixels: int) -> tuple[Image.Image, ImagePlan]:
+    """Normalise orientation and colour, then resize to the token budget."""
+    return encode(normalize(image), budget_pixels)

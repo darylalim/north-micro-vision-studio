@@ -70,13 +70,18 @@ def _sampling_control() -> Sampling:
 
     if greedy:
         st.caption("Temperature pinned to 0; nucleus and top-k inactive.")
-        return Sampling(max_tokens=max_tokens, temperature=0.0, top_p=1.0, top_k=0)
+        temperature, top_p, top_k = 0.0, 1.0, 0
+    else:
+        temperature = st.slider(
+            "Temperature", 0.0, 1.5, DEFAULT_TEMPERATURE, 0.05, key="temp"
+        )
+        top_p = st.slider("Top-p", 0.05, 1.0, DEFAULT_TOP_P, 0.05, key="top_p")
+        top_k = st.slider("Top-k", 0, 100, DEFAULT_TOP_K, 1, key="top_k")
 
-    temperature = st.slider(
-        "Temperature", 0.0, 1.5, DEFAULT_TEMPERATURE, 0.05, key="temp"
-    )
-    top_p = st.slider("Top-p", 0.05, 1.0, DEFAULT_TOP_P, 0.05, key="top_p")
-    top_k = st.slider("Top-k", 0, 100, DEFAULT_TOP_K, 1, key="top_k")
+    # Rendered in both modes deliberately. A repetition penalty is orthogonal
+    # to temperature, and greedy argmax decoding is exactly where repetition
+    # loops bite hardest. Hiding the widget in greedy mode would also make
+    # Streamlit drop its key, silently losing the setting on every toggle.
     penalty = st.slider(
         "Repetition penalty",
         1.0,

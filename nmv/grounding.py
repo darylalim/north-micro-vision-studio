@@ -99,19 +99,26 @@ def _walk(node, inherited: str, out: list[Box]) -> None:
     """Recursively pull boxes out of arbitrarily-shaped decoded JSON."""
     if isinstance(node, dict):
         label = _label_from(node) or inherited
+        consumed = None
         for key in _BOX_KEYS:
             value = node.get(key)
             if isinstance(value, (list, tuple)):
+                consumed = key
                 if len(value) == 4 and all(isinstance(v, (int, float)) for v in value):
                     if (box := _make_box(value, label)) is not None:
                         out.append(box)
-                        break
                 else:  # e.g. {"boxes": [[...], [...]]}
                     for item in value:
                         _walk(item, label, out)
-                    break
-        else:
-            for value in node.values():
+                break
+
+        # Descend into everything else even after a box was found. A node can
+        # carry its own box *and* nested ones ({"bbox_2d": ..., "cells": [...]}),
+        # and those children used to survive only because the scanner re-parsed
+        # them standalone — making nesting an accident of the duplicate work
+        # that the span scan below now removes.
+        for key, value in node.items():
+            if key != consumed:
                 _walk(value, label, out)
         return
 
@@ -124,37 +131,56 @@ def _walk(node, inherited: str, out: list[Box]) -> None:
             _walk(item, inherited, out)
 
 
+def _balanced_spans(text: str) -> list[tuple[int, int]]:
+    """Every balanced bracket pair, found in a single O(n) pass.
+
+    The previous approach restarted a full scan at each `[` or `{`, which is
+    quadratic: a response containing thousands of unclosed braces (a page of
+    transcribed code, say) took over a second and blocked the script thread.
+    One stack-based pass costs the same regardless, and unmatched openers
+    simply never produce a span.
+    """
+    stack: list[int] = []
+    spans: list[tuple[int, int]] = []
+    in_string = escaped = False
+    for index, char in enumerate(text):
+        if in_string:
+            if escaped:
+                escaped = False
+            elif char == "\\":
+                escaped = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+        elif char in "[{":
+            stack.append(index)
+        elif char in "]}" and stack:
+            spans.append((stack.pop(), index))
+    return spans
+
+
 def _json_candidates(text: str):
-    """Yield decoded JSON found in fenced blocks or balanced brackets."""
+    """Yield decoded JSON from fenced blocks, then from balanced brackets."""
     for fenced in _FENCE.findall(text):
         with contextlib.suppress(json.JSONDecodeError):
             yield json.loads(fenced)
 
-    openers = {"[": "]", "{": "}"}
-    for start, char in enumerate(text):
-        if char not in openers:
+    # Outermost first, so a successful parse lets us skip everything nested
+    # inside it -- `_walk` now recurses properly, so the children are covered.
+    # A span that fails to decode does not consume its region, leaving inner
+    # fragments recoverable from malformed output.
+    consumed_to = -1
+    for start, end in sorted(_balanced_spans(text), key=lambda span: (span[0], -span[1])):
+        if start <= consumed_to:
             continue
-        depth, in_string, escaped = 0, False, False
-        for end in range(start, len(text)):
-            current = text[end]
-            if in_string:
-                if escaped:
-                    escaped = False
-                elif current == "\\":
-                    escaped = True
-                elif current == '"':
-                    in_string = False
-                continue
-            if current == '"':
-                in_string = True
-            elif current in openers:
-                depth += 1
-            elif current in openers.values():
-                depth -= 1
-                if depth == 0:
-                    with contextlib.suppress(json.JSONDecodeError):
-                        yield json.loads(text[start : end + 1])
-                    break
+        try:
+            decoded = json.loads(text[start : end + 1])
+        except json.JSONDecodeError:
+            continue
+        consumed_to = end
+        yield decoded
 
 
 def parse_boxes(text: str) -> list[Box]:

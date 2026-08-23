@@ -18,7 +18,8 @@ Do not add quantised variants without being asked.
 uv sync                                        # create venv, install pinned deps
 uv run streamlit run streamlit_app.py          # run the app (localhost:8501)
 
-uv run python tests/test_resize_parity.py      # the only test; plain script, no pytest
+uv run python tests/test_resize_parity.py      # resize/token invariants; plain script, no pytest
+uv run python tests/test_runtime_abandon.py    # MLX worker must survive abandoned streams
 uv run ruff check .                            # lint  (E, F, I, UP, B, SIM, C4)
 uv run ruff format .                           # format (line-length 90)
 uv run ty check                                # type check (targets 3.11)
@@ -89,7 +90,7 @@ Consequences:
 |---|---|
 | `nmv/runtime.py` | MLX worker thread. Read first. |
 | `nmv/model.py` | Loading (`st.cache_resource`), `Sampling`, `RunStats`, streaming |
-| `nmv/imaging.py` | Token budgeting, resize, EXIF normalisation. **No MLX import.** |
+| `nmv/imaging.py` | Token budgeting, `encode`/`prepare`, EXIF normalisation. **No MLX import.** |
 | `nmv/grounding.py` | 0–1000 box parsing and PIL overlay rendering |
 | `nmv/ui.py` | Shared sidebar; returns `(budget, sampling, stats_slot)` |
 | `app_pages/*.py` | Page scripts — UI only, direct scripts with no `main()` |
@@ -103,9 +104,13 @@ and KV-cache memory. Ceiling is 3,868,706 px (A4 @ 200 dpi). The checkpoint's
 only honours keys literally named `min_pixels`/`max_pixels`, which that file lacks — so
 that larger number never applies and should not be reintroduced as a limit.
 
-**Pre-resizing before handing images to mlx-vlm is safe** because `smart_resize` is
-idempotent on dimensions already snapped to 32 and inside the bounds. Keep the slider
-capped at the native ceiling or that stops holding.
+**Pre-resizing before handing images to mlx-vlm is safe only because `plan()` models
+mlx-vlm's own second pass.** mlx-vlm re-runs `smart_resize` on whatever it receives
+using the *checkpoint's* bounds, not our budget — so a tight budget that lands below
+`MIN_PIXELS` gets scaled back up, and the size and token count shown to the user would
+be wrong. `plan()` therefore applies our budget, then mlx-vlm's bounds, and reports that
+fixed point. `tests/test_resize_parity.py` asserts every target survives mlx-vlm's pass
+untouched and that the token count matches its own patch arithmetic.
 
 **Grounding boxes are on a 0–1000 grid**, not in pixels, so they apply to any rendering
 of the image. Overlays are therefore drawn on the full-resolution upload. Both the

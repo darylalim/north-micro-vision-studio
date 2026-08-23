@@ -49,7 +49,10 @@ class Sampling:
     top_p: float = DEFAULT_TOP_P
     top_k: int = DEFAULT_TOP_K
     repetition_penalty: float = 1.0
-    seed: int | None = None
+    # No `seed` field on purpose. mlx-vlm 0.6.15 only honours a seed on its
+    # _PositionedTargetSampler fast path, which requires top_k == 0 (see
+    # mlx_vlm/generate/ar.py:269). This studio always sends top_k=20, so a seed
+    # would be accepted and silently ignored -- worse than not offering one.
 
     def as_kwargs(self) -> dict:
         kwargs: dict[str, Any] = {
@@ -60,8 +63,6 @@ class Sampling:
         }
         if self.repetition_penalty and self.repetition_penalty != 1.0:
             kwargs["repetition_penalty"] = self.repetition_penalty
-        if self.seed is not None:
-            kwargs["seed"] = self.seed
         return kwargs
 
 
@@ -75,6 +76,16 @@ class RunStats:
     generation_tps: float = 0.0
     peak_memory: float = 0.0
     finish_reason: str | None = None
+
+    @property
+    def truncated(self) -> bool:
+        """True when decoding stopped at ``max_tokens`` rather than finishing.
+
+        Worth surfacing: a truncated reply is otherwise indistinguishable from
+        a complete one, and a JSON box list cut off mid-array looks exactly
+        like the model declining to answer in JSON at all.
+        """
+        return self.finish_reason == "length"
 
     def absorb(self, chunk: Any) -> None:
         for name in (

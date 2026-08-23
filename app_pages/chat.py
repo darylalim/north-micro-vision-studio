@@ -5,14 +5,19 @@ image markers we emit and hands each picture to the right turn, so a follow-up
 question can refer back to a page uploaded three turns ago.
 """
 
-import streamlit as st
-from PIL import Image, UnidentifiedImageError
+from typing import Any
 
-from nmv.imaging import AspectRatioError, prepare
+import streamlit as st
+from PIL import Image
+
+from nmv.imaging import (
+    IMAGE_ERRORS,
+    IMAGE_TYPES,
+    VALIDATED_CONTEXT_TOKENS,
+    prepare,
+)
 from nmv.model import RunStats, assistant_turn, stream_reply, user_turn
 from nmv.ui import ensure_studio, render_stats, sidebar
-
-IMAGE_TYPES = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"]
 
 SUGGESTIONS = {
     ":blue[:material/description:] Read a document": (
@@ -86,13 +91,15 @@ else:
 
 if text or uploads:
     images, notes, failures = [], [], []
+    turn_tokens = 0
     for upload in uploads:
         try:
             image, resolved = prepare(Image.open(upload), budget)
-        except (AspectRatioError, UnidentifiedImageError, OSError, ValueError) as error:
+        except IMAGE_ERRORS as error:
             failures.append(f"**{upload.name}** — {error}")
             continue
         images.append(image)
+        turn_tokens += resolved.tokens
         note = (
             f"{upload.name} · {resolved.target[0]}×{resolved.target[1]} · "
             f"{resolved.tokens:,} tokens"
@@ -108,14 +115,18 @@ if text or uploads:
         text = "Describe this image." if images else ""
 
     if text:
-        st.session_state.chat.append(
-            {
-                "role": "user",
-                "text": text,
-                "images": images,
-                "note": " · ".join(f"`{n}`" for n in notes) if notes else "",
-            }
-        )
+        # Held out of session_state until the reply lands. Committing the user
+        # turn first would leave an orphan behind any failure or interruption,
+        # and the rebuild below would then emit two consecutive user messages
+        # whose image markers no longer match `ordered_images` — corrupting
+        # every later turn with no way back but "Clear conversation".
+        pending: dict[str, Any] = {
+            "role": "user",
+            "text": text,
+            "images": images,
+            "note": " · ".join(f"`{n}`" for n in notes) if notes else "",
+            "tokens": turn_tokens,
+        }
         with st.chat_message("user"):
             if images:
                 st.image(images, width=180)
@@ -126,12 +137,25 @@ if text or uploads:
         # Rebuild the whole conversation each turn. Images are collected in the
         # same order the markers appear, which is how they get matched up.
         messages, ordered_images = [], []
-        for record in st.session_state.chat:
+        for record in (*st.session_state.chat, pending):
             if record["role"] == "user":
                 messages.append(user_turn(record["text"], len(record["images"])))
                 ordered_images.extend(record["images"])
             else:
                 messages.append(assistant_turn(record["text"]))
+
+        # Every image from every prior turn is re-sent and re-encoded each
+        # time, so image cost accumulates across the conversation. Warn once it
+        # passes the multimodal window Cohere actually validated — the sidebar
+        # figure is per-image and cannot show this.
+        carried = sum(r.get("tokens", 0) for r in st.session_state.chat) + turn_tokens
+        if carried > VALIDATED_CONTEXT_TOKENS:
+            st.warning(
+                f"Images in this conversation now total ~{carried:,} tokens, past the "
+                f"{VALIDATED_CONTEXT_TOKENS:,}-token multimodal context this model was "
+                "validated at. Start a new conversation for reliable answers.",
+                icon=":material/warning:",
+            )
 
         stats = RunStats()
         with st.chat_message("assistant"):
@@ -143,10 +167,14 @@ if text or uploads:
                 f"{stats.generation_tokens:,} generated at "
                 f"{stats.generation_tps:.0f} tok/s · peak {stats.peak_memory:.2f} GB"
             )
+            if stats.truncated:
+                stats_line += " · **stopped at max tokens**"
             st.caption(stats_line)
 
         st.session_state.last_stats = stats
         render_stats(stats_slot, stats)
+        # Both turns commit together, so history is never left half-written.
+        st.session_state.chat.append(pending)
         st.session_state.chat.append(
             {"role": "assistant", "text": reply, "images": [], "stats_line": stats_line}
         )

@@ -22,13 +22,16 @@ from trampling each other's decode.
 
 from __future__ import annotations
 
+import logging
 import queue
 import threading
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Any, TypeVar
 
 T = TypeVar("T")
+
+logger = logging.getLogger("nmv.runtime")
 
 _EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mlx-worker")
 _BOOT_LOCK = threading.Lock()
@@ -64,7 +67,9 @@ def call(fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
     return submit(fn, *args, **kwargs).result()
 
 
-def iterate(produce: Callable[[Callable[[Any], bool]], None]) -> Iterator[Any]:
+def iterate(
+    produce: Callable[[Callable[[Any], bool]], object],
+) -> Generator[Any, None, None]:
     """Stream items out of a worker-side producer.
 
     ``produce`` is handed an ``emit(item) -> bool`` callback and runs on the
@@ -72,6 +77,10 @@ def iterate(produce: Callable[[Callable[[Any], bool]], None]) -> Iterator[Any]:
     ``emit`` returns False once the consumer has walked away, which lets a
     generation loop bail out instead of wedging the single worker on a full
     queue — the case that matters when a user navigates away mid-response.
+
+    The return type is ``Generator`` rather than ``Iterator`` because closing
+    it is part of the contract: that is how Streamlit signals abandonment when
+    it interrupts a script mid-stream.
     """
     channel: queue.Queue = queue.Queue(maxsize=128)
     finished = object()
@@ -89,10 +98,17 @@ def iterate(produce: Callable[[Callable[[Any], bool]], None]) -> Iterator[Any]:
     def run() -> None:
         try:
             produce(emit)
-        except BaseException as error:  # surfaced on the consumer thread
-            emit(error)
+        except BaseException as error:
+            # Hand the failure to the consumer. If nobody is listening any more
+            # the traceback would otherwise vanish silently, so log it instead.
+            if not emit(error):
+                logger.exception("MLX worker failed after the consumer left")
         finally:
-            channel.put(finished)
+            # Bounded, exactly like every other put. A plain `channel.put()`
+            # here blocks forever when the consumer abandons a full channel —
+            # and because the executor has a single worker, that wedges MLX for
+            # every session in the process until the server restarts.
+            emit(finished)
 
     future = submit(run)
     try:

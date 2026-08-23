@@ -9,14 +9,12 @@ copy — no coordinate rescaling between the two.
 from io import BytesIO
 
 import streamlit as st
-from PIL import Image, UnidentifiedImageError
+from PIL import Image
 
 from nmv.grounding import draw_boxes, parse_boxes
-from nmv.imaging import AspectRatioError, normalize, prepare
+from nmv.imaging import IMAGE_ERRORS, IMAGE_TYPES, encode, normalize
 from nmv.model import RunStats, stream_reply, user_turn
 from nmv.ui import ensure_studio, render_stats, sidebar
-
-IMAGE_TYPES = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"]
 
 PRESETS = {
     "Objects": (
@@ -59,9 +57,15 @@ instruction = st.text_area(
     height=110,
 )
 
-# A new upload must not inherit the previous image's boxes.
-if st.session_state.get("grounding_file_id") != getattr(upload, "file_id", None):
-    st.session_state.grounding_file_id = getattr(upload, "file_id", None)
+# Any input that changes what the boxes *mean* invalidates the cached result.
+# Keying on the upload alone let a new instruction, preset or image budget
+# render a fresh "Encoding at ..." caption directly above the previous run's
+# overlay, table and download — stale output indistinguishable from current.
+# "Show labels" is deliberately absent: it only re-renders what is already
+# there, and re-running the model for it would be wasteful.
+signature = (getattr(upload, "file_id", None), instruction, budget)
+if st.session_state.get("grounding_signature") != signature:
+    st.session_state.grounding_signature = signature
     st.session_state.pop("grounding_result", None)
 
 run = st.button(
@@ -79,8 +83,8 @@ if upload is None:
 # encoder saw; otherwise EXIF-rotated photos get boxes on the wrong axis.
 try:
     original = normalize(Image.open(upload))
-    encoded, resolved = prepare(original, budget)
-except (AspectRatioError, UnidentifiedImageError, OSError, ValueError) as error:
+    encoded, resolved = encode(original, budget)  # already normalised
+except IMAGE_ERRORS as error:
     st.error(str(error), icon=":material/broken_image:")
     st.stop()
 
@@ -88,7 +92,7 @@ st.caption(
     f"Encoding at **{resolved.target[0]}×{resolved.target[1]}** "
     f"({resolved.tokens:,} visual tokens)"
     + (
-        f" · downscaled from {resolved.source[0]}×{resolved.source[1]}"
+        f" · {resolved.direction} from {resolved.source[0]}×{resolved.source[1]}"
         if resolved.resized
         else ""
     )
@@ -105,7 +109,7 @@ if run:
     st.session_state.grounding_result = {
         "raw": raw,
         "boxes": parse_boxes(raw),
-        "stats": stats,
+        "truncated": stats.truncated,
     }
 
 result = st.session_state.get("grounding_result")
@@ -120,13 +124,23 @@ overlay, details = st.columns([3, 2], gap="medium")
 
 with overlay:
     if boxes:
-        annotated = draw_boxes(original, boxes, show_labels=show_labels)
+        # Render and PNG-encode once per (result, label setting) rather than on
+        # every rerun. Without this, nudging any sidebar widget re-ran an RGBA
+        # convert, an alpha composite and a full PNG encode of the original —
+        # hundreds of milliseconds for a UI action that changed nothing here.
+        overlay_key = (st.session_state.get("grounding_signature"), show_labels)
+        if st.session_state.get("grounding_overlay_key") != overlay_key:
+            annotated = draw_boxes(original, boxes, show_labels=show_labels)
+            buffer = BytesIO()
+            annotated.save(buffer, format="PNG")
+            st.session_state.grounding_overlay = (annotated, buffer.getvalue())
+            st.session_state.grounding_overlay_key = overlay_key
+
+        annotated, png_bytes = st.session_state.grounding_overlay
         st.image(annotated, width="stretch")
-        buffer = BytesIO()
-        annotated.save(buffer, format="PNG")
         st.download_button(
             "Download overlay",
-            buffer.getvalue(),
+            png_bytes,
             file_name=f"{upload.name.rsplit('.', 1)[0]}-boxes.png",
             mime="image/png",
             icon=":material/download:",
@@ -152,11 +166,21 @@ with details:
             width="stretch",
         )
     else:
-        st.warning(
-            "No boxes parsed from the response. The model sometimes answers in "
-            "prose — try the deterministic toggle, or ask explicitly for JSON.",
-            icon=":material/search_off:",
-        )
+        # Diagnose the actual cause. A response cut off at max_tokens leaves a
+        # half-written JSON array, which looks identical to the model simply
+        # answering in prose — and the remedies are opposite.
+        if result.get("truncated"):
+            st.warning(
+                "The response stopped at the max-tokens limit, so the box list was "
+                "cut off mid-array. Raise **Max new tokens** in the sidebar.",
+                icon=":material/content_cut:",
+            )
+        else:
+            st.warning(
+                "No boxes parsed from the response. The model sometimes answers in "
+                "prose — try the deterministic toggle, or ask explicitly for JSON.",
+                icon=":material/search_off:",
+            )
 
     with st.expander("Raw response"):
         st.code(result["raw"] or "(empty)", language=None, wrap_lines=True)

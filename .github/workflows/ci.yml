@@ -25,7 +25,9 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v10
+      # Pinned to an exact release on purpose: setup-uv stopped publishing
+      # floating major tags after v7, so `@v10` is not a resolvable ref.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
 

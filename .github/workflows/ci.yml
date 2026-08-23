@@ -68,14 +68,16 @@ jobs:
       - name: MLX worker survives abandoned streams
         run: uv run python tests/test_runtime_abandon.py
 
-  # Version bumps open their own release. When pyproject.toml names a version
-  # that has neither a tag nor a release, this opens a DRAFT with auto-generated
-  # notes for you to review and publish.
+  # Version bumps release themselves. When pyproject.toml names a version that
+  # has neither a tag nor a release, this publishes it outright -- tag, release
+  # and notes, no clicks. `needs: check` means that can only ever happen on a
+  # commit where lint, types and both tests passed.
   #
-  # Nothing is written to the repository until you press Publish: GitHub does
-  # not create the git tag for a draft release, so a draft you delete leaves no
-  # tag behind. `needs: check` means a draft can only ever appear for a commit
-  # where lint, types and both tests passed.
+  # Publishing straight through instead of staging a draft removes the human who
+  # used to read that draft, so the things they were implicitly checking are now
+  # explicit steps: the version must parse as PEP 440, and it must be ahead of
+  # the highest tag already released. Anything that is not a final version is
+  # marked as a pre-release so it does not take the "Latest" badge.
   #
   # There is deliberately no `paths:` filter on pyproject.toml -- GitHub cannot
   # scope one to a single job, so it would skip CI on every other push. This job
@@ -89,16 +91,65 @@ jobs:
       contents: write
 
     steps:
-      # fetch-depth: 0 because the notes below are built from tag history.
+      # fetch-depth: 0 for the tags: both the version check and the notes below
+      # read them, and the default shallow clone fetches none.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Read version from pyproject.toml
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: Read and validate version
         id: version
         run: |
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["version"])')
-          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+          # packaging parses and orders PEP 440. Hand-rolling that comparison to
+          # save a dependency would be a poor trade -- it is what decides whether
+          # a release happens at all, and "0.10.0 > 0.9.0" is precisely the sort
+          # of thing string comparison gets wrong.
+          uv run --no-project --quiet --with packaging python - <<'PY'
+          import os
+          import subprocess
+          import sys
+          import tomllib
+
+          from packaging.version import InvalidVersion, Version
+
+          with open("pyproject.toml", "rb") as handle:
+              raw = tomllib.load(handle)["project"]["version"]
+
+          try:
+              version = Version(raw)
+          except InvalidVersion:
+              print(f"::error::pyproject.toml version {raw!r} is not a valid PEP 440 version.")
+              sys.exit(1)
+
+          tags = subprocess.run(
+              ["git", "tag", "--list", "v*"],
+              capture_output=True,
+              text=True,
+              check=True,
+          ).stdout.split()
+
+          released = []
+          for tag in tags:
+              try:
+                  released.append(Version(tag[1:]))
+              except InvalidVersion:
+                  continue  # a tag this workflow did not create
+          highest = max(released) if released else None
+
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"tag=v{raw}\n")
+              out.write(f"version={raw}\n")
+              out.write(f"prerelease={str(version.is_prerelease).lower()}\n")
+              out.write(f"highest={('v' + str(highest)) if highest else 'none'}\n")
+              out.write(f"ahead={str(highest is None or version > highest).lower()}\n")
+
+          print(f"{raw} parses as PEP 440; pre-release={version.is_prerelease}; "
+                f"highest released tag={('v' + str(highest)) if highest else 'none'}")
+          PY
 
       - name: Skip versions that are already released
         id: guard
@@ -106,26 +157,43 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
         run: |
-          # Two checks, not one. A pending draft has no tag yet, so testing the
-          # tag alone would open a fresh draft on every later push to main; the
-          # releases listing (which includes drafts for a token with push
-          # access) is what actually makes this idempotent.
+          # Two checks, not one. The tag is the ordinary signal, but a release
+          # whose tag was deleted, or a draft opened by hand, would slip past it
+          # and produce a duplicate. The releases listing includes drafts for a
+          # token with push access, which closes that gap.
           if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
             echo "${TAG} is already tagged -- nothing to do."
             echo "new=false" >> "$GITHUB_OUTPUT"
           elif gh api "repos/${GITHUB_REPOSITORY}/releases" --paginate --jq '.[].tag_name' | grep -Fxq "${TAG}"; then
-            echo "A release for ${TAG} already exists, possibly an unpublished draft -- nothing to do."
+            echo "A release for ${TAG} already exists -- nothing to do."
             echo "new=false" >> "$GITHUB_OUTPUT"
           else
             echo "${TAG} is new."
             echo "new=true" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Open draft release
+      # Deliberately after the guard, not before. The version in pyproject.toml
+      # equals the highest tag for the whole life of a release, so an unguarded
+      # forward-only check would fail every single push to main.
+      - name: Check the version moves forward
+        if: steps.guard.outputs.new == 'true'
+        env:
+          AHEAD: ${{ steps.version.outputs.ahead }}
+          VERSION: ${{ steps.version.outputs.version }}
+          HIGHEST: ${{ steps.version.outputs.highest }}
+        run: |
+          if [ "${AHEAD}" != "true" ]; then
+            echo "::error::pyproject.toml is at ${VERSION}, which is not ahead of the highest released tag ${HIGHEST}. Refusing to publish a version that goes backwards."
+            exit 1
+          fi
+          echo "${VERSION} is ahead of ${HIGHEST}."
+
+      - name: Publish release
         if: steps.guard.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ steps.version.outputs.tag }}
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
         run: |
           # Notes come from commit subjects, not --generate-notes. That flag
           # assembles its list from merged pull requests, and this repository
@@ -149,12 +217,14 @@ jobs:
             echo "**Full Changelog**: ${changelog}"
           } > "${RUNNER_TEMP}/notes.md"
 
-          # --target pins the draft to the exact commit CI passed on, which is
-          # the commit the tag will be cut from when you publish.
-          url=$(gh release create "${TAG}" \
-            --target "${GITHUB_SHA}" \
-            --title "${TAG}" \
-            --draft \
-            --notes-file "${RUNNER_TEMP}/notes.md")
-          echo "Draft release ready for review: ${url}"
-          echo "Draft release **${TAG}** is ready for review: ${url}" >> "$GITHUB_STEP_SUMMARY"
+          # --target pins the tag to the exact commit CI passed on. Publishing
+          # creates that tag immediately, unlike a draft.
+          args=(--target "${GITHUB_SHA}" --title "${TAG}" --notes-file "${RUNNER_TEMP}/notes.md")
+          if [ "${PRERELEASE}" = "true" ]; then
+            args+=(--prerelease)
+            echo "${TAG} is a pre-release; it will not take the Latest badge."
+          fi
+
+          url=$(gh release create "${TAG}" "${args[@]}")
+          echo "Published ${url}"
+          echo "Published **${TAG}**: ${url}" >> "$GITHUB_STEP_SUMMARY"

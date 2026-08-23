@@ -1,0 +1,21 @@
+# Deliberately restrained: in a vision studio the images are the content, so
+# the chrome stays quiet. Only the accent and typography are set, leaving the
+# base surfaces to follow the viewer's light/dark preference.
+[theme]
+primaryColor = "#0d9488"
+linkColor = "#0f766e"
+baseRadius = "6px"
+buttonRadius = "6px"
+showWidgetBorder = true
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
+codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+codeFontSize = "0.8125rem"
+linkUnderline = false
+
+[server]
+# Native-resolution means big uploads are useful; the encoder downsamples them
+# to the token budget anyway.
+maxUploadSize = 50
+
+[browser]
+gatherUsageStats = false

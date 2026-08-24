@@ -162,7 +162,9 @@ conversations with images break.
 Targeting Streamlit 1.62. `use_container_width` is deprecated — use `width="stretch"`
 or `width="content"`. Sidebar stats use a reserved `st.empty()` slot filled *after*
 generation, otherwise the panel trails one interaction behind. Prefer native elements
-over custom HTML/CSS.
+over custom HTML/CSS. `st.chat_input(accept_file=...)` renders its attach control as a
+`+`, not a paperclip — check `assets/screenshot-*.png` before describing any UI
+affordance in prose or captions.
 
 **A `key` does not survive a page switch — every sidebar widget needs
 `persist_state="session"`.** Streamlit folds the active page's script hash into every

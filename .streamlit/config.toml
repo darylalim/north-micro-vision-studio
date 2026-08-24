@@ -1,16 +1,67 @@
-# Deliberately restrained: in a vision studio the images are the content, so
-# the chrome stays quiet. Only the accent and typography are set, leaving the
-# base surfaces to follow the viewer's light/dark preference.
+# Nord, dark only.
+#
+# A `[theme]` block with no `[theme.light]`/`[theme.dark]` siblings removes the
+# appearance switcher from the app menu entirely and pins the app to this
+# palette — the viewer's system preference is ignored. That is the intent here,
+# not an oversight: the studio is tuned for one ground and calibrated against it.
+#
+# Nord earns the slot on background luminance. Uploads are mostly white document
+# scans, and the grounding overlay is drawn on the full-resolution original, so
+# the page lands in the layout as a near-white rectangle. #2e3440 sits about four
+# times lighter than the usual near-black dark themes, which keeps that step from
+# reading as glare over a long session of box-checking and OCR.
+#
+# Its muted callout colours matter for the same reason: the grounding page puts
+# st.warning and st.error beside an image carrying the eight saturated overlay
+# colours from nmv/grounding.py, and the chrome has to stay subordinate to those.
+#
+# One trap worth recording — do not "modernise" this back to the old teal accent.
+# A dark-ground teal lands on #2dd4bf, which is literally PALETTE[6], so the
+# accent and a detection box would be the same colour. Frost blue sits further
+# from every palette entry than any teal does.
 [theme]
-primaryColor = "#0d9488"
-linkColor = "#0f766e"
-baseRadius = "6px"
-buttonRadius = "6px"
+base = "dark"
+primaryColor = "#88c0d0"
+backgroundColor = "#2e3440"
+secondaryBackgroundColor = "#3b4252"
+codeBackgroundColor = "#3b4252"
+textColor = "#eceff4"
+linkColor = "#81a1c1"
+borderColor = "#4c566a"
 showWidgetBorder = true
+showSidebarBorder = true
+baseRadius = "4px"
+buttonRadius = "4px"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
 codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
-codeFontSize = "0.8125rem"
+codeFontSize = "0.875rem"
+codeTextColor = "#d8dee9"
+baseFontSize = 14
+baseFontWeight = 400
+headingFontSizes = ["32px", "24px", "20px", "16px", "14px", "12px"]
+headingFontWeights = [600, 600, 600, 600, 600, 600]
 linkUnderline = false
+chartCategoricalColors = [
+    "#88c0d0",
+    "#81a1c1",
+    "#5e81ac",
+    "#a3be8c",
+    "#ebcb8b",
+    "#d08770",
+    "#bf616a",
+]
+blueColor = "#81a1c1"
+greenColor = "#a3be8c"
+yellowColor = "#ebcb8b"
+orangeColor = "#d08770"
+redColor = "#bf616a"
+violetColor = "#b48ead"
+
+[theme.sidebar]
+backgroundColor = "#3b4252"
+secondaryBackgroundColor = "#434c5e"
+codeBackgroundColor = "#434c5e"
+borderColor = "#4c566a"
 
 [server]
 # Native-resolution means big uploads are useful; the encoder downsamples them

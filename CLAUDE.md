@@ -149,7 +149,27 @@ conversations with images break.
 Targeting Streamlit 1.62. `use_container_width` is deprecated — use `width="stretch"`
 or `width="content"`. Sidebar stats use a reserved `st.empty()` slot filled *after*
 generation, otherwise the panel trails one interaction behind. Prefer native elements
-over custom HTML/CSS; theming lives in `.streamlit/config.toml`.
+over custom HTML/CSS.
+
+**A `key` does not survive a page switch — every sidebar widget needs
+`persist_state="session"`.** Streamlit folds the active page's script hash into every
+element id, "even if key_as_main_identity is specified"
+(`streamlit/elements/lib/utils.py`), so `budget_mp` on Chat and `budget_mp` on Grounding
+are two different widgets. `nmv/ui.py` is rendered from both pages, so without session
+scope a page switch silently reset the image budget to the ceiling — a ~7x change in
+prefill cost with nothing on screen to say so. The same rule covers the sliders
+`_sampling_control` hides in deterministic mode, which were dropped on every toggle.
+Anything new in that sidebar carries `persist_state="session"` too.
+
+**The app is deliberately dark-only.** `.streamlit/config.toml` holds a single `[theme]`
+block (Nord), and a `[theme]` with no `[theme.light]`/`[theme.dark]` siblings removes the
+appearance switcher from the app menu entirely and ignores the viewer's system
+preference. Nord is chosen for background luminance: uploads are mostly white document
+scans and the grounding overlay is drawn on the full-resolution original, so `#2e3440`
+keeps that near-white rectangle from reading as glare. Do not swap the accent back to a
+teal — on a dark ground teal lands on `#2dd4bf`, which *is* `PALETTE[6]` in
+`nmv/grounding.py`, so the chrome accent and a detection box would be the same colour.
+Restart the server after editing the file; theme changes do not hot-reload.
 
 For any non-trivial Streamlit work, invoke the `developing-with-streamlit` skill — it
 routes to version-matched reference docs bundled inside the installed package.

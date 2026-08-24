@@ -47,8 +47,14 @@ uv run hf download mlx-community/North-Micro-Vision-Instruct-bf16
 paperclip; each one stays bound to the turn it arrived on, so a later question can
 refer back to a page uploaded several turns earlier. Responses stream token by token.
 
-**Grounding** — single-shot detection with a bounding-box overlay, a table of parsed
-coordinates, and a PNG download. Turn on **Deterministic** for steadier boxes.
+![The Chat page: an invoice attached to the first turn and answered, then a follow-up question answered from the same image without re-attaching it](assets/screenshot-chat.png)
+
+*The follow-up carries no image of its own. Prompt tokens go 2,166 -> 2,213 across the two
+turns, so the page attached on turn one is still bound to that turn.*
+
+**Grounding** (shown at the top) — single-shot detection with a bounding-box overlay, a
+table of parsed coordinates, and a PNG download. Turn on **Deterministic** for steadier
+boxes.
 
 `assets/sample-invoice.png` is a synthetic page for exercising both.
 

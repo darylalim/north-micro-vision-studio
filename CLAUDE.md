@@ -59,6 +59,19 @@ it when you mean to ship. The workflow refuses a version that is not valid PEP 4
 ahead of the highest existing tag, and marks pre-releases so they do not take "Latest",
 but nothing checks whether you *meant* it.
 
+**A bump is two files.** `uv.lock` records the project's own version alongside its
+dependencies, so run `uv lock` and commit the result with the `pyproject.toml` change:
+
+```bash
+uv lock && git add pyproject.toml uv.lock
+```
+
+Skipping it fails CI before anything publishes: `uv sync --locked` reports drift
+(`The lockfile at uv.lock needs to be updated`), that fails `check`, and `release`
+declares `needs: check`. So the outcome of a half-finished bump is a red run and *no
+release at all* rather than a broken one — safe, but worth recognising, since uv's hint
+names `uv lock` without connecting it to the version you just changed.
+
 ## The constraint that shapes the architecture
 
 mlx-vlm builds its generation stream at import time:

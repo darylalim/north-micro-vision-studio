@@ -170,3 +170,19 @@ pre-release (`0.2.0rc1`, `0.3.0.dev1`) as such so it does not take the "Latest" 
 | Prefill | ~590 tok/s |
 | Decode | 72–88 tok/s |
 | Peak memory | 6.17 GB |
+
+## License
+
+The studio's own code is Apache-2.0 — see [`LICENSE`](LICENSE).
+
+The weights are a separate matter, and none are vendored here: `uv sync` installs no
+checkpoint, and the ~5 GB of weights arrive from the Hugging Face cache on first run.
+Both [CohereLabs/North-Micro-Vision-Instruct](https://huggingface.co/CohereLabs/North-Micro-Vision-Instruct)
+and the [mlx-community bf16 conversion](https://huggingface.co/mlx-community/North-Micro-Vision-Instruct-bf16)
+this studio loads are Apache-2.0 as well, so the two halves line up — but they are
+governed by their own model cards, not by the file above.
+
+Apache-2.0 rather than MIT for the patent grant (§3) and, more to the point here, for
+the explicit statement that no trademark rights travel with it (§6). *Cohere* and
+*North Micro Vision* are Cohere's marks; this is an unaffiliated project that runs their
+published checkpoint.

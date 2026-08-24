@@ -218,6 +218,23 @@ def parse_boxes(text: str) -> list[Box]:
     return list(merged.values())
 
 
+def contains_json(text: str) -> bool:
+    """True when any part of ``text`` decoded as JSON.
+
+    Separates a model that answered correctly with an empty result from one that
+    answered in prose. Both leave :func:`parse_boxes` returning nothing, but the
+    remedies point in opposite directions: a well-formed ``[]`` means the
+    instruction simply found no match, so the query or the image budget is what
+    should change, while unparseable prose means the request for JSON never
+    landed and the sampling settings are worth a look.
+
+    Reuses :func:`_json_candidates`, which yields only what actually decoded, so
+    prose that merely contains brackets ("I see [nothing]") stays on the prose
+    side rather than being mistaken for an empty answer.
+    """
+    return any(True for _ in _json_candidates(text))
+
+
 def _font(size: int) -> ImageFont.BaseImageFont:
     """Pick a legible font, degrading to whatever Pillow can supply.
 

@@ -12,7 +12,7 @@ import streamlit as st
 from PIL import Image
 from streamlit.typing import UploadedFile
 
-from nmv.grounding import Box, draw_boxes, parse_boxes
+from nmv.grounding import Box, contains_json, draw_boxes, parse_boxes
 from nmv.imaging import IMAGE_ERRORS, IMAGE_TYPES, ImagePlan, encode, normalize
 from nmv.model import RunStats, stream_reply, user_turn
 from nmv.ui import ensure_studio, render_stats, sidebar
@@ -217,20 +217,32 @@ with details:
             key="grounding_boxes",
         )
     else:
-        # Diagnose the actual cause. A response cut off at max_tokens leaves a
-        # half-written JSON array, which looks identical to the model simply
-        # answering in prose — and the remedies are opposite.
+        # Three different things produce zero boxes and their remedies point in
+        # different directions, so the message has to name the right one.
+        # Truncation is tested first: a reply cut off at max_tokens leaves a
+        # half-written array that decodes as nothing, and would otherwise be
+        # misread as prose.
         if result.get("truncated"):
             st.warning(
                 "The response stopped at the max-tokens limit, so the box list was "
                 "cut off mid-array. Raise **Max new tokens** in the sidebar.",
                 icon=":material/content_cut:",
             )
+        elif contains_json(result["raw"]):
+            # Well-formed JSON holding no boxes. The model answered, and the
+            # answer is "nothing here matches" — a correct result, not a
+            # failure, so this is st.info and says nothing about sampling.
+            st.info(
+                "The model returned an empty result — it found nothing matching this "
+                "instruction. Try different wording or another task preset, or raise "
+                "the image budget if the target is small.",
+                icon=":material/search_off:",
+            )
         else:
             st.warning(
                 "No boxes parsed from the response. The model sometimes answers in "
                 "prose — try the deterministic toggle, or ask explicitly for JSON.",
-                icon=":material/search_off:",
+                icon=":material/format_quote:",
             )
 
     raw_panel = st.expander("Raw response", on_change="rerun")

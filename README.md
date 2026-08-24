@@ -16,6 +16,11 @@ This studio runs the **bf16** conversion only
 to Cohere's published numbers. Quantised conversions exist upstream if you ever need
 the footprint down.
 
+![The Grounding page: North Micro Vision has boxed the invoice's text block, with both detections listed beside the overlay in 0-1000 grid and pixel coordinates](assets/screenshot-grounding.png)
+
+*Grounding on `assets/sample-invoice.png` — 2,145 visual tokens at 1248x1760. Row 2's pixel
+span `818, 1179, 1140, 1400` is the PAID stamp, further down the page than the crop shows.*
+
 ## Requirements
 
 - Apple Silicon Mac. 16 GB unified memory is enough; peak usage is ~6.2 GB.

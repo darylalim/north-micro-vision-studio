@@ -31,7 +31,18 @@ MAX_MEGAPIXELS = MAX_PIXELS / MEGAPIXEL
 
 
 def ensure_studio() -> Studio:
-    """Load the checkpoint, warning first if it still has to be downloaded."""
+    """Load the checkpoint, warning first if it still has to be downloaded.
+
+    Called before the page body paints, which looks like it breaks Streamlit's
+    "render stable UI before slow work" guidance. It does not. That rule targets
+    work that repeats on every rerun, and ``load_studio`` is ``st.cache_resource``
+    -- 3.4 s once per server process, nothing after. The sidebar and page chrome
+    are already up by this point, and the widgets that wait could not be used
+    during the load anyway, because the session's script thread is blocked inside
+    it. Reserving slots to paint them earlier would buy a control nobody can
+    click, at the cost of routing both page bodies through ``slot.foo()`` writes
+    instead of plain ``st.foo()``. Deliberate; please leave it.
+    """
     if not is_cached():
         st.warning(
             f"`{MODEL_REPO}` is not in the Hugging Face cache yet — the first run "

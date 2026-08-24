@@ -33,7 +33,7 @@ SUGGESTIONS = {
 
 st.title("Chat")
 st.caption(
-    "Document Q&A, OCR, charts and captioning. Attach images with the paperclip; "
+    "Document Q&A, OCR, charts and captioning. Attach images with the **+** button; "
     "they stay attached to that turn for the rest of the conversation."
 )
 

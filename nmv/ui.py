@@ -20,6 +20,15 @@ from nmv.model import (
 
 MAX_MEGAPIXELS = MAX_PIXELS / MEGAPIXEL
 
+# Every widget below carries `persist_state="session"`, and a bare `key` is not
+# a substitute. Streamlit folds the active page's script hash into every element
+# id -- "even if key_as_main_identity is specified", per
+# streamlit/elements/lib/utils.py -- so `budget_mp` on Chat and `budget_mp` on
+# Grounding are two different widgets. Without session scope, switching pages
+# silently reset the budget to the ceiling and every sampling control to its
+# default. Session scope also covers the sliders `_sampling_control` hides in
+# deterministic mode, which were dropped the same way on each toggle.
+
 
 def ensure_studio() -> Studio:
     """Load the checkpoint, warning first if it still has to be downloaded."""
@@ -44,6 +53,7 @@ def _budget_control() -> int:
         step=0.05,
         format="%.2f MP",
         key="budget_mp",
+        persist_state="session",
         help=(
             "The encoder spends one token per 32×32 px block, so tokens scale "
             "with area. The ceiling is an A4 page at 200 dpi — the largest "
@@ -64,24 +74,54 @@ def _sampling_control() -> Sampling:
         "Deterministic",
         value=False,
         key="greedy",
+        persist_state="session",
         help="Temperature 0 — repeatable runs, better for grounding and OCR.",
     )
-    max_tokens = st.slider("Max new tokens", 64, 2048, 512, step=64, key="max_tokens")
+    max_tokens = st.slider(
+        "Max new tokens",
+        64,
+        2048,
+        512,
+        step=64,
+        key="max_tokens",
+        persist_state="session",
+    )
 
     if greedy:
         st.caption("Temperature pinned to 0; nucleus and top-k inactive.")
         temperature, top_p, top_k = 0.0, 1.0, 0
     else:
         temperature = st.slider(
-            "Temperature", 0.0, 1.5, DEFAULT_TEMPERATURE, 0.05, key="temp"
+            "Temperature",
+            0.0,
+            1.5,
+            DEFAULT_TEMPERATURE,
+            0.05,
+            key="temp",
+            persist_state="session",
         )
-        top_p = st.slider("Top-p", 0.05, 1.0, DEFAULT_TOP_P, 0.05, key="top_p")
-        top_k = st.slider("Top-k", 0, 100, DEFAULT_TOP_K, 1, key="top_k")
+        top_p = st.slider(
+            "Top-p",
+            0.05,
+            1.0,
+            DEFAULT_TOP_P,
+            0.05,
+            key="top_p",
+            persist_state="session",
+        )
+        top_k = st.slider(
+            "Top-k",
+            0,
+            100,
+            DEFAULT_TOP_K,
+            1,
+            key="top_k",
+            persist_state="session",
+        )
 
-    # Rendered in both modes deliberately. A repetition penalty is orthogonal
+    # Rendered in both modes deliberately: a repetition penalty is orthogonal
     # to temperature, and greedy argmax decoding is exactly where repetition
-    # loops bite hardest. Hiding the widget in greedy mode would also make
-    # Streamlit drop its key, silently losing the setting on every toggle.
+    # loops bite hardest.
     penalty = st.slider(
         "Repetition penalty",
         1.0,
@@ -89,6 +129,7 @@ def _sampling_control() -> Sampling:
         1.0,
         0.01,
         key="rep_pen",
+        persist_state="session",
         help="1.0 disables it. Cohere suggests a mild penalty for long outputs.",
     )
     return Sampling(

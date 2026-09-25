@@ -168,9 +168,10 @@ uv run ty check
 ## CI and releases
 
 Every pull request and every push to `main` runs the checks above, plus a grep for
-module-scope MLX imports, on an Apple Silicon runner — `mlx` ships arm64 macOS wheels
-only, so there is no Linux job. `uv sync --locked` fails the build if `uv.lock` has
-drifted from `pyproject.toml`.
+module-scope MLX imports, on an Apple Silicon runner. There is no Linux job: the lock
+installs there, but mlx's Linux wheel carries no backend unless installed with its `cpu`
+or `cuda` extra, so neither test could import it. `uv sync --locked` fails the build if
+`uv.lock` has drifted from `pyproject.toml`.
 
 **Bumping `version` in `pyproject.toml` on `main` publishes a GitHub release.** Once CI is
 green the workflow tags that commit, builds notes from the commit subjects since the

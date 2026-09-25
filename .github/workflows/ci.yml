@@ -15,10 +15,12 @@ concurrency:
 
 jobs:
   check:
-    # Apple Silicon is not a preference here. mlx publishes arm64 macOS wheels
-    # only, so `uv sync --locked` cannot resolve on Linux, and both tests plus
-    # `ty check` need mlx-vlm importable. Every current macos-* image is Apple
-    # Silicon, so macos-latest is safe on architecture.
+    # Apple Silicon is not a preference here. The lock installs on Linux, but
+    # mlx's Linux wheel ships no libmlx.so. On macOS mlx-metal supplies the
+    # library (as libmlx.dylib); on Linux only the cpu/cuda extras do, and they
+    # are not locked -- so `import mlx.core` fails there and both tests with it.
+    # Every current macos-* image is Apple Silicon, so macos-latest is safe on
+    # architecture.
     runs-on: macos-latest
     timeout-minutes: 20
 

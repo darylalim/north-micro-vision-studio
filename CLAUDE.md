@@ -54,9 +54,12 @@ When working with Python, invoke the relevant `/astral:<skill>` for `uv`, `ty`, 
 ## CI and releases
 
 `.github/workflows/ci.yml` runs every command above on an Apple Silicon runner, plus the
-module-scope MLX import grep. There is no Linux job and cannot be one: `mlx` ships arm64
-macOS wheels only, so `uv sync --locked` will not resolve on Linux, and `ty` needs
-mlx-vlm importable to check `nmv/model.py`.
+module-scope MLX import grep. There is no Linux job because the tests cannot run there.
+The lock does install on Linux — `mlx` publishes manylinux wheels — but its extension
+links `libmlx.so`, which the wheel does not ship. `mlx-metal` supplies the library on
+macOS (as `libmlx.dylib`); on Linux only the `mlx[cpu]` / `mlx[cuda]` extras do, and they
+are not locked. So `import mlx.core` fails, and both tests import it through
+`nmv.runtime` or mlx-vlm.
 
 **Editing `version` in `pyproject.toml` is a publish action.** On `main`, once CI passes,
 the workflow tags that commit and publishes a GitHub release with notes built from commit

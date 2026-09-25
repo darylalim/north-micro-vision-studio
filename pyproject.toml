@@ -19,6 +19,7 @@ package = false
 dev = [
     "ruff>=0.14",
     "ty>=0.0.82",
+    "watchdog>=6.0.0",
 ]
 
 [tool.ruff]

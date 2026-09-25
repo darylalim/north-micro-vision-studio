@@ -1,67 +1,213 @@
-# Nord, dark only.
+# Polar Indigo: Nord's polar night lowered to near-black, and a light half that
+# lays the scan on a cool grey mat.
 #
-# A `[theme]` block with no `[theme.light]`/`[theme.dark]` siblings removes the
-# appearance switcher from the app menu entirely and pins the app to this
-# palette — the viewer's system preference is ignored. That is the intent here,
-# not an oversight: the studio is tuned for one ground and calibrated against it.
+# Both [theme.dark] and [theme.light] are set, so the app menu offers System,
+# Light and Dark. A first-time viewer gets System: it follows the OS
+# prefers-color-scheme and switches live when that changes. A pick is kept in
+# localStorage under stActiveTheme-<path>-v2: that browser only, and the URL
+# path the tab was loaded from, so a reload on /grounding does not see a pick
+# made after loading /. Streamlit forces `base` per mode, so none is set here.
 #
-# Nord earns the slot on background luminance. Uploads are mostly white document
-# scans, and the grounding overlay is drawn on the full-resolution original, so
-# the page lands in the layout as a near-white rectangle. #2e3440 sits about four
-# times lighter than the usual near-black dark themes, which keeps that step from
-# reading as glare over a long session of box-checking and OCR.
+# The halves are one system. Neutrals sit at OKLCH hue ~266 and the accent at
+# 273.5. Callout text and avatars use Nord's aurora and frost hues
+# (15/38/84/131/249) in both modes; only lightness and chroma move. The one
+# exception is the dark callout tints: Streamlit derives them at 20% over the
+# ground, so they drift towards its blue (error 342, success 171), where the
+# light tints are set by hand at the aurora hues. Shape, type, widget borders
+# and link underlines are shared in [theme].
 #
-# Its muted callout colours matter for the same reason: the grounding page puts
-# st.warning and st.error beside an image carrying the eight saturated overlay
-# colours from nmv/grounding.py, and the chrome has to stay subordinate to those.
-#
-# One trap worth recording — do not "modernise" this back to the old teal accent.
-# A dark-ground teal lands on #2dd4bf, which is literally PALETTE[6], so the
-# accent and a detection box would be the same colour. Frost blue sits further
-# from every palette entry than any teal does.
+# Fonts are Streamlit's bundled Source Sans 3 and Source Code Pro: they work
+# offline and make no request to fonts.googleapis.com on every page load.
 [theme]
-base = "dark"
-primaryColor = "#88c0d0"
-backgroundColor = "#2e3440"
-secondaryBackgroundColor = "#3b4252"
-codeBackgroundColor = "#3b4252"
-textColor = "#eceff4"
-linkColor = "#81a1c1"
-borderColor = "#4c566a"
+# Link colour is under 3:1 against body text, and answers autolink OCR'd URLs.
+linkUnderline = true
 showWidgetBorder = true
 showSidebarBorder = true
 baseRadius = "4px"
 buttonRadius = "4px"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
-codeFont = "'JetBrains Mono':https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap"
+font = "sans-serif"
+codeFont = "monospace"
 codeFontSize = "0.875rem"
-codeTextColor = "#d8dee9"
-baseFontSize = 14
+baseFontSize = 15
 baseFontWeight = 400
-headingFontSizes = ["32px", "24px", "20px", "16px", "14px", "12px"]
+headingFontSizes = ["2rem", "1.5rem", "1.25rem", "1.125rem", "1rem", "0.875rem"]
 headingFontWeights = [600, 600, 600, 600, 600, 600]
-linkUnderline = false
-chartCategoricalColors = [
-    "#88c0d0",
-    "#81a1c1",
-    "#5e81ac",
-    "#a3be8c",
-    "#ebcb8b",
-    "#d08770",
-    "#bf616a",
-]
+metricValueFontSize = "1.5rem"
+metricValueFontWeight = 500
+
+[theme.sidebar]
+# Not inherited from [theme]: st.subheader (h3) at body size.
+headingFontSizes = ["1.25rem", "1.125rem", "1rem", "0.9375rem", "0.875rem", "0.75rem"]
+
+# Dark: here the accent sets the ground. Streamlit paints the primary button
+# label and the chat send arrow a fixed #fff on primaryColor. It paints the
+# selected st.segmented_control / st.pills option in primaryColor on a 10% tint
+# of itself (20% under the pointer). On a dark ground no one primary passes both
+# at 4.5:1. This half gives up the label: "Find boxes" reads 3.05:1 at rest and
+# 5.54 on hover and keyboard focus, where it darkens. The send arrow keeps
+# primaryColor on hover and stays at 3.05, just clear of the 3:1 UI floor. In
+# exchange the selected grounding task reads 5.33 (4.55 hovered). The other side
+# of that trade drops the selected task to about 3.3:1, the level Streamlit uses
+# for disabled text, so the active task reads as disabled. It is on screen the
+# whole time, where the button label is read once per run. Keeping the hovered
+# selection at 4.5 with the arrow at 3:1 needs a ground at OKLCH L 0.19 or
+# darker; #0f131c is L 0.187. At L 0.26 and above no single primary works, so do
+# not lift the ground back towards #2e3440 without re-running that trade.
+#
+# The same primary fixes two smaller misses that no config value can clear
+# without undoing the trade. The keyboard focus ring (primary at 50%) is 2.43:1
+# on the ground. The toggle knob, which is body text, is 2.26:1 on the primary
+# "on" track.
+#
+# The cost is the glare Nord was chosen to avoid: a white scan on #0f131c is an
+# 18.6:1 step, against 12.5:1 on #2e3440 and 18.9:1 on stock Streamlit. Text is
+# nord4 rather than white so the scan stays the brightest thing on screen. For
+# long box-checking sessions, the answer is [theme.light] below.
+#
+# The accent, OKLCH 0.67/0.09/274, sits in the widest hue gap of PALETTE in
+# nmv/grounding.py (sky 233 to violet 306) at about half the overlay's chroma.
+# It is 0.124 OKLab dE from the nearest box colour, where Nord's frost blue was
+# 0.083 from the sky box. More distance on this ground needs chroma near 0.055,
+# which reads as grey.
+#
+# Callouts keep Nord's aurora and frost hues with pale, low-chroma text (L 0.86,
+# C 0.04), for calm rather than overlay separation: on Grounding they only
+# appear when no boxes were drawn. greenTextColor and orangeTextColor carry a
+# little more chroma (C 0.07) because their only consumers are the Chat starter
+# icons, and at C 0.04 the three icons stopped reading as different colours.
+#
+# One trap worth recording: do not "modernise" this back to the old teal accent.
+# A dark-ground teal lands on #2dd4bf, which is literally PALETTE[6], so the
+# accent and a detection box would be the same colour.
+[theme.dark]
+primaryColor = "#8391cc"
+backgroundColor = "#0f131c"
+secondaryBackgroundColor = "#1e232d"
+codeBackgroundColor = "#1a1e27"
+textColor = "#d8dee9"
+linkColor = "#b1bce5"
+codeTextColor = "#c9d0e9"
+# 3.2:1 on the ground, so input and uploader edges meet WCAG 1.4.11.
+borderColor = "#616671"
+dataframeHeaderBackgroundColor = "#1a1e27"
+dataframeBorderColor = "#2e3440"
 blueColor = "#81a1c1"
 greenColor = "#a3be8c"
 yellowColor = "#ebcb8b"
 orangeColor = "#d08770"
 redColor = "#bf616a"
 violetColor = "#b48ead"
+blueTextColor = "#bdd4eb"
+greenTextColor = "#b4ce9f"
+yellowTextColor = "#ddcfb4"
+orangeTextColor = "#edb5a3"
+redTextColor = "#eac7c8"
 
-[theme.sidebar]
-backgroundColor = "#3b4252"
-secondaryBackgroundColor = "#434c5e"
-codeBackgroundColor = "#434c5e"
-borderColor = "#4c566a"
+[theme.dark.sidebar]
+backgroundColor = "#181c24"
+secondaryBackgroundColor = "#252a34"
+codeBackgroundColor = "#21252f"
+# 3.4:1 on the sidebar: the "Deterministic" toggle's off track, on screen by default.
+borderColor = "#6a6f7a"
+
+# Light: the scan is the paper, so the ground is a mat. Glare is gone: a white
+# scan steps 1.31:1 off #dee1e8, against 18.6 in the dark half. The risk flips.
+# The document's edge can vanish into a near-white page. At OKLCH L 0.909 every
+# paper tone tried stays lighter than the ground: white 1.31:1, off-white
+# #f4f2ee 1.17, a grey copy #e9e7e2 1.06, yellowed #efe8d8 1.07 (dE 0.040).
+# Lighter grounds lose the grey copy first. Between L 0.92 and 0.93 it sits at
+# about 1.01:1 and disappears. At Nord6's 0.95, off-white is down to 1.03. The
+# mat is cool (hue 267) because scans run warm (~85): where luminance runs out
+# the hue difference still helps, if only by about one just-noticeable step
+# for the grey copy, and a warm ground would erase even that.
+#
+# There are two neutrals, and a well always takes the other one. The mat is
+# L 0.909. The panel tone covers the sidebar (0.939), fields (0.942), and code
+# and the dataframe header (0.934). Main-column wells rise to the panel and
+# sidebar wells drop to the mat, so each steps 1.08-1.1:1 off what surrounds
+# it. No chrome surface rises above L 0.942, which is under the off-white scan
+# (0.962), so the document stays the brightest thing on screen. Streamlit's
+# light state surfaces (active nav, slider track, selected segment) sit below
+# the mat, and so do the callout tints.
+#
+# One surface escapes this: Chat shows uploads in Streamlit's user bubble, a
+# fixed gray20 at 50% over the mat (#e7eaef, L 0.936), where a grey copy steps
+# 1.02:1 and a yellowed one 1.01. Holding 1.05 there needs a mat near L 0.86
+# (1.53:1 glare, captions 4.54), so the Grounding mat wins; box-at-edge
+# judgement happens there, not in Chat.
+#
+# The accent trade inverts: on a light ground one dark primary passes both the
+# fixed white label (10.2:1) and the selected task (6.70, 5.65 hovered). It is
+# the dark half's hue at slightly more chroma (0.102 against 0.089), OKLCH
+# 0.381/0.102/273.5. It is as light as it can be while the focus ring matches
+# the dark half's 2.43:1; at L 0.42 the ring was 2.30. A 3:1 ring needs a
+# primary near L 0.26, 1.25:1 from the ink, which turns "Find boxes" and every
+# "on" toggle into black blocks. So the ring is this half's one residual; the
+# dark half also carries its 3.05 label and 2.26 knob. The accent is 0.357
+# OKLab from the nearest box colour (violet) and the ring 0.145 (sky). It sits
+# 1.93:1 from the ink, so the selected task reads by colour as well as by its
+# tint.
+#
+# Captions are text at 60% opacity, and they set the ink. Near-black #070a12
+# (L 0.146, the dark ground's hue) holds them at 4.80:1 on the mat and 4.96 in
+# the sidebar.
+#
+# Callout text mirrors the dark half: the same hue and chroma, but dark text at
+# L 0.40 (5.7-5.9:1 on its tint) where the dark half has pale text at L 0.86.
+# The tints are set by hand at L 0.85, stepping 1.20-1.22:1 below the mat.
+# Streamlit's derived 10% tints come out grey on this ground (C 0.000-0.014).
+# Warning and success get a C 0.018 floor for the same reason. Green and orange
+# text carry C 0.075 for the Chat starter icons, which sit 0.101-0.113 OKLab
+# apart (dark: 0.101-0.115). Callout text stays 0.33 or more from the palette.
+[theme.light]
+primaryColor = "#323c78"
+backgroundColor = "#dee1e8"
+secondaryBackgroundColor = "#e9ecf1"
+codeBackgroundColor = "#e6e9f0"
+textColor = "#070a12"
+# The dark half's link relation mirrored: 9.9:1 on the ground, 1.53 from the ink.
+linkColor = "#272f55"
+# Ink with an indigo cast. Inline code inside a caption (Chat file names) reads
+# 4.73:1 on the mat and 4.63 in the user bubble; the dark half reads 4.72.
+codeTextColor = "#0c1023"
+# 3.2:1 on the ground, as in the dark half. It is also the "Show labels" off
+# track, where the ground-coloured knob sits at 3.2 as well.
+borderColor = "#797c83"
+dataframeHeaderBackgroundColor = "#e6e9f0"
+# 1.45:1, the dark half's quiet grid (1.49).
+dataframeBorderColor = "#b9bcc4"
+# Sidebar subheader dividers: 2.40:1, hue 275 at C 0.024, twins of the dark 2.42.
+grayColor = "#9498a8"
+# Blue, green and violet are inert here, because tints and text are explicit.
+# They keep the dark chroma for anything added later.
+blueColor = "#5f7e9c"
+greenColor = "#708a5a"
+# Inert too, and kept dull on purpose. A bright darkened yellow (#e2b75c) drifts
+# to 0.083 from PALETTE[3]; this one's nearest box colour is 0.149 away.
+yellowColor = "#a68748"
+# Chat avatars carry a white icon: 4.07 (assistant, orange) and 5.79 (user,
+# red). They sit 0.148 and 0.198 from PALETTE[0].
+orangeColor = "#ad6e5a"
+redColor = "#9a4f56"
+violetColor = "#8b6784"
+blueTextColor = "#364a5d"
+greenTextColor = "#395022"
+yellowTextColor = "#52462f"
+orangeTextColor = "#6a3829"
+redTextColor = "#5b3f41"
+blueBackgroundColor = "#c0d0e0"
+greenBackgroundColor = "#cad0c4"
+yellowBackgroundColor = "#d3cdc1"
+redBackgroundColor = "#dfc7c8"
+
+[theme.light.sidebar]
+# The panel tone, 1.095:1 above the mat; the dark sidebar steps 1.089.
+backgroundColor = "#e8ebf0"
+# Sidebar wells drop to the mat: the model-id st.code steps 1.095:1 down.
+secondaryBackgroundColor = "#dee1e8"
+codeBackgroundColor = "#dee1e8"
+# 3.4:1 on the sidebar: the "Deterministic" toggle's off track, on screen by default.
+borderColor = "#7b7e86"
 
 [server]
 # Native-resolution means big uploads are useful; the encoder downsamples them

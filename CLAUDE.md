@@ -224,15 +224,45 @@ result, which skips that copy, so there the defaults stick. A browser keeps the 
 max tokens and temperature in both directions, and the "Up to N tokens" caption shows the
 server has them. Removing Grounding's `st.stop()` calls only makes AppTest look fixed.
 
-**The app is deliberately dark-only.** `.streamlit/config.toml` holds a single `[theme]`
-block (Nord), and a `[theme]` with no `[theme.light]`/`[theme.dark]` siblings removes the
-appearance switcher from the app menu entirely and ignores the viewer's system
-preference. Nord is chosen for background luminance: uploads are mostly white document
-scans and the grounding overlay is drawn on the full-resolution original, so `#2e3440`
-keeps that near-white rectangle from reading as glare. Do not swap the accent back to a
-teal — on a dark ground teal lands on `#2dd4bf`, which *is* `PALETTE[6]` in
-`nmv/grounding.py`, so the chrome accent and a detection box would be the same colour.
-Restart the server after editing the file; theme changes do not hot-reload.
+**The app has a dark and a light theme, built as one system (Polar Indigo).**
+`.streamlit/config.toml` puts shared keys in `[theme]` and `[theme.sidebar]` and each
+mode's colours in `[theme.dark]` / `[theme.light]` plus their `.sidebar` tables. Having both
+variant tables puts System, Light and Dark in the app menu; a first-time viewer gets
+System, which follows the OS `prefers-color-scheme` live. A pick is stored in
+localStorage under `stActiveTheme-<path>-v2`, keyed by the URL path the tab was loaded
+from, so a reload on `/grounding` does not see a choice made after loading `/` — that is
+Streamlit, not an app bug. Leave `base` unset (Streamlit forces it per mode).
+`baseFontSize`, `baseFontWeight`, `fontFaces`, `metricValueFontSize`/`Weight` and
+`showSidebarBorder` are only accepted in `[theme]`; Streamlit logs and drops them elsewhere.
+Both halves keep the neutral hue (~266°), the accent hue (273.5°, the widest gap in
+`PALETTE` in `nmv/grounding.py`, 233°→306°) and the aurora hues of callout text and
+avatars; lightness and chroma are what move.
+
+In the dark half the accent sets the ground. Streamlit paints the primary button label
+and chat send arrow a fixed `#fff` on `primaryColor` (no key changes it), and the selected
+`st.segmented_control` option in `primaryColor` on a 10–20% tint of itself, so on a dark
+ground no single primary passes both at 4.5:1. Dark gives up "Find boxes" (3.05:1 at rest,
+5.54 on hover) to keep the always-visible selected task at 5.33, which needs a ground at
+OKLCH L ≤ 0.19 (`#0f131c`) — do not lighten it towards Nord's `#2e3440` without re-running
+the trade. Its residuals are that label, the focus ring (2.43) and the toggle knob on the
+"on" track (2.26).
+
+The light half exists for long scan sessions, since a white scan is an 18.6:1 step on the
+dark ground. Its ground `#dee1e8` is a cool grey mat set by the scan's edge: white,
+off-white and grey-copy paper all stay lighter than it (1.31, 1.17, 1.06:1), and no chrome
+rises above L 0.942, so on Grounding the document stays the brightest thing on screen.
+Chat's user bubble is the exception (fixed gray20 over the mat, where a grey copy steps
+1.02:1). There the trade inverts: the dark primary `#323c78` passes the white label (10.2)
+and the selected task (6.70) together, and its one residual is the focus ring (2.43).
+
+Do not swap either accent for a teal — on a dark ground teal lands on `#2dd4bf`, which
+*is* `PALETTE[6]`. The numbers behind every value are in the file's comments. Streamlit
+derives most rendered colours (hover darkening, alert tints, faded captions), so check
+contrast on resolved colours, not config values, and a change meant for one half must
+leave the other half's resolved colours unchanged. Check both modes in a real browser;
+after a live mode switch the sidebar `divider="gray"` rules keep the old mode's colour
+until a reload, so reload before judging them. Restart the server after editing the file;
+theme changes do not hot-reload.
 
 For any non-trivial Streamlit work, invoke the `developing-with-streamlit` skill — it
 routes to version-matched reference docs bundled inside the installed package.

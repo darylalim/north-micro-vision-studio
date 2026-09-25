@@ -37,7 +37,7 @@ PNG download. Turn on **Deterministic** for steadier boxes.
 ![The Grounding page: the invoice's text block boxed, with both detections listed beside the overlay in 0-1000 grid and pixel coordinates](assets/screenshot-grounding.png)
 
 *Grounding on `assets/sample-invoice.png` — 2,145 visual tokens at 1248×1760. Row 2's
-pixel span `818, 1179, 1140, 1400` is the PAID stamp, further down the page than the crop
+pixel span `817, 1177, 1142, 1403` is the PAID stamp, further down the page than the crop
 shows.*
 
 `assets/sample-invoice.png` is a synthetic invoice for exercising both pages.

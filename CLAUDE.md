@@ -197,6 +197,17 @@ prefill cost with nothing on screen to say so. The same rule covers the sliders
 `_sampling_control` hides in deterministic mode, which were dropped on every toggle.
 Anything new in that sidebar carries `persist_state="session"` too.
 
+Check page-switch persistence in a real browser, not with `streamlit.testing.v1.AppTest`.
+On a page change the browser sends no widget states for the old page, and that is what
+lets `ScriptRunner`'s pre-run cleanup ("Clear widget state on page change") hand each
+`persist_state="session"` value to the new page's widget. `AppTest.switch_page().run()`
+resends the old page's states instead, so the first run after *any* switch uses the
+defaults. A run that finishes copies the value across afterwards, so `.value` looks right
+although the run never used it; Grounding's runs end in `st.stop()` until there is a
+result, which skips that copy, so there the defaults stick. A browser keeps the budget,
+max tokens and temperature in both directions, and the "Up to N tokens" caption shows the
+server has them. Removing Grounding's `st.stop()` calls only makes AppTest look fixed.
+
 **The app is deliberately dark-only.** `.streamlit/config.toml` holds a single `[theme]`
 block (Nord), and a `[theme]` with no `[theme.light]`/`[theme.dark]` siblings removes the
 appearance switcher from the app menu entirely and ignores the viewer's system

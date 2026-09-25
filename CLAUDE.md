@@ -37,6 +37,13 @@ annotations are narrower than its runtime behaviour (`apply_chat_template` retur
 `prepare_inputs` routes them through `process_image`). Keep the casts and their
 comments rather than replacing them with blanket ignores.
 
+`streamlit_app.py` carries the one suppression: a targeted
+`# ty: ignore[call-non-callable]` on `st.navigation`, a ty 0.0.82+ false positive that
+the comment above it explains. ty reports an unused `ty: ignore` as a warning and exits
+1 on warnings, which is why the dev floor is `ty>=0.0.82` and why `ty check` will go red
+the day ty or Streamlit stops producing the error. Delete the ignore and its comment
+then, rather than silencing the warning.
+
 **Restart the server after editing anything under `nmv/`.** Streamlit hot-reloads
 `streamlit_app.py` and `app_pages/*`, but `nmv/*` are ordinary imported modules cached
 in `sys.modules`; edits there surface as a stale `ImportError` until you restart.
@@ -77,7 +84,7 @@ names `uv lock` without connecting it to the version you just changed.
 mlx-vlm builds its generation stream at import time:
 
 ```python
-# mlx_vlm/generate/common.py:20
+# mlx_vlm/generate/common.py:35
 generation_stream = mx.new_thread_local_stream(mx.default_device())
 ```
 
@@ -159,8 +166,9 @@ conversations with images break.
 
 ## Streamlit conventions in use
 
-Targeting Streamlit 1.62. `use_container_width` is deprecated — use `width="stretch"`
-or `width="content"`. Sidebar stats use a reserved `st.empty()` slot filled *after*
+Targeting Streamlit 1.64 (floor 1.62, the first release with `streamlit.typing`).
+`use_container_width` is deprecated — use `width="stretch"` or `width="content"`.
+Sidebar stats use a reserved `st.empty()` slot filled *after*
 generation, otherwise the panel trails one interaction behind. Prefer native elements
 over custom HTML/CSS. `st.chat_input(accept_file=...)` renders its attach control as a
 `+`, not a paperclip — check `assets/screenshot-*.png` before describing any UI

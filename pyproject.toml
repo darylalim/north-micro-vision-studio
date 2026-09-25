@@ -5,8 +5,8 @@ description = "Streamlit studio for Cohere North Micro Vision (bf16) on Apple Si
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
 dependencies = [
-    "streamlit>=1.57",
-    "mlx-vlm==0.6.15",
+    "streamlit>=1.62",
+    "mlx-vlm==0.7.3",
     "pillow>=11.0",
     "numpy>=2.0",
 ]
@@ -17,7 +17,7 @@ package = false
 [dependency-groups]
 dev = [
     "ruff>=0.14",
-    "ty>=0.0.74",
+    "ty>=0.0.82",
 ]
 
 [tool.ruff]

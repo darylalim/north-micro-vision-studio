@@ -12,6 +12,16 @@ chat, and grounding with a bounding-box overlay.
 This is a deliberate choice so results stay comparable to Cohere's published numbers.
 Do not add quantised variants without being asked.
 
+**The checkpoint is pinned to a Hub commit** — `MODEL_REVISION` in `nmv/model.py`, which
+`load()`, `load_config()` and `is_cached()` all take. A checkpoint can run code here two
+ways: mlx-vlm executes the file `config.json` names under `model_file`, and it loads the
+cohere_compass tokenizer with `trust_remote_code=True`, so transformers runs any module
+an `auto_map` entry names — from this repo, or from another repo's `main`. `load()` also
+downloads `*.py` with the weights, so following `main` would run whatever that repo
+publishes next. Moving the pin is a code change: confirm the new commit has no `.py`
+files and no `model_file` or `auto_map` key in any `.json`, then update the `--revision`
+in both prefetch commands.
+
 ## Commands
 
 ```bash
@@ -24,7 +34,9 @@ uv run ruff check .                            # lint  (E, F, I, UP, B, SIM, C4)
 uv run ruff format .                           # format (line-length 90)
 uv run ty check                                # type check (targets 3.11)
 
-uv run hf download mlx-community/North-Micro-Vision-Instruct-bf16   # prefetch weights
+# prefetch the pinned weights (MODEL_REVISION in nmv/model.py)
+uv run hf download mlx-community/North-Micro-Vision-Instruct-bf16 \
+  --revision 614b36574d6ecf1c2a79ff3ea28aa89bbc7fcd13
 ```
 
 ruff and ty are locked dev dependencies, so use `uv run ruff` / `uv run ty`, not the

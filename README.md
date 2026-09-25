@@ -55,11 +55,13 @@ uv sync
 uv run streamlit run streamlit_app.py
 ```
 
-The first launch pulls ~5 GB of weights into the Hugging Face cache. To fetch them ahead
-of time:
+The first launch pulls ~5 GB of weights into the Hugging Face cache. The studio loads a
+fixed commit of the checkpoint rather than whatever `main` points at, so to fetch them
+ahead of time, ask for that same commit:
 
 ```bash
-uv run hf download mlx-community/North-Micro-Vision-Instruct-bf16
+uv run hf download mlx-community/North-Micro-Vision-Instruct-bf16 \
+  --revision 614b36574d6ecf1c2a79ff3ea28aa89bbc7fcd13
 ```
 
 ## Things worth knowing

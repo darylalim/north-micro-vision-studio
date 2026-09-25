@@ -26,6 +26,15 @@ from PIL import Image
 from nmv import runtime
 
 MODEL_REPO = "mlx-community/North-Micro-Vision-Instruct-bf16"
+# A commit on that repo, not a branch, because a checkpoint can run code here.
+# mlx-vlm executes the file config.json names under `model_file`
+# (get_model_and_args in mlx_vlm/utils.py), and loads the cohere_compass tokenizer
+# with trust_remote_code=True, so transformers runs whatever an `auto_map` entry
+# names -- in this repo, or in another repo's `main`. load() fetches `*.py` with
+# the weights, so following `main` would run what the repo publishes next. This
+# commit has no .py files, no `model_file` and no `auto_map`; check all three
+# before moving it.
+MODEL_REVISION = "614b36574d6ecf1c2a79ff3ea28aa89bbc7fcd13"
 
 # The checkpoint's own generation_config.json. Cohere also notes the model was
 # not trained to follow system prompts, so the studio never sends one — task
@@ -105,30 +114,32 @@ class RunStats:
                 setattr(self, name, value)
 
 
-def _load(repo_id: str) -> Studio:
+def _load(repo_id: str, revision: str) -> Studio:
     from mlx_vlm import load
     from mlx_vlm.utils import load_config
 
-    model, processor = load(repo_id)
-    return Studio(model=model, processor=processor, config=load_config(repo_id))
+    model, processor = load(repo_id, revision=revision)
+    config = load_config(repo_id, revision=revision)
+    return Studio(model=model, processor=processor, config=config)
 
 
 @st.cache_resource(show_spinner=False)
-def load_studio(repo_id: str = MODEL_REPO) -> Studio:
+def load_studio(repo_id: str = MODEL_REPO, revision: str = MODEL_REVISION) -> Studio:
     """Load weights once per server process.
 
     ``st.cache_resource`` rather than ``cache_data``: the model is a live,
     unserialisable object graph, and every session should share the one copy
     instead of paying 5 GB again.
     """
-    return runtime.call(_load, repo_id)
+    return runtime.call(_load, repo_id, revision)
 
 
-def is_cached(repo_id: str = MODEL_REPO) -> bool:
+def is_cached(repo_id: str = MODEL_REPO, revision: str = MODEL_REVISION) -> bool:
     """True when weights are already on disk, so the UI can warn before a 5 GB pull."""
     from huggingface_hub import try_to_load_from_cache
 
-    return isinstance(try_to_load_from_cache(repo_id, "config.json"), str)
+    cached = try_to_load_from_cache(repo_id, "config.json", revision=revision)
+    return isinstance(cached, str)
 
 
 def user_turn(text: str, image_count: int = 0) -> dict:

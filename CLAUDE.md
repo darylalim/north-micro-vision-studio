@@ -122,8 +122,9 @@ grep -rnE --include='*.py' '^(from|import) mlx(_vlm)?\b' nmv/ app_pages/ streaml
 That must return nothing.
 
 If you ever broaden the ruff `select` set, note that `PLC0415`
-(`import-outside-top-level`) fires on all six function-local mlx-vlm imports. Those
-are deliberate — ignore the rule, never hoist the imports to satisfy it.
+(`import-outside-top-level`) fires on six function-local imports. Five are mlx-vlm and
+deliberate — ignore the rule, never hoist them to satisfy it. The sixth is
+`huggingface_hub` in `is_cached()`, which the invariant does not cover.
 
 Consequences:
 

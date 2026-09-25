@@ -1,8 +1,8 @@
 """Guard the one piece of mlx-vlm logic we mirror instead of import.
 
 ``nmv.imaging.smart_resize`` is a copy, kept so that no Streamlit page thread
-can import mlx-vlm and steal its thread-local GPU stream. That copy is only
-safe while it agrees with upstream, so check it exhaustively.
+ever imports mlx-vlm; that happens only on the MLX worker (see ``nmv.runtime``).
+The copy is only safe while it agrees with upstream, so check it exhaustively.
 
 Run:  uv run python tests/test_resize_parity.py
 """

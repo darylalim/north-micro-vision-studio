@@ -1,19 +1,20 @@
 """Every MLX call runs on one dedicated, long-lived thread.
 
-mlx-vlm builds its generation stream at import time::
-
-    # mlx_vlm/generate/common.py
-    generation_stream = mx.new_thread_local_stream(mx.default_device())
-
-That stream is *thread-local*: it belongs to whichever thread first imported
-the package, and using it anywhere else raises
+MLX binds each thread's default stream to that thread, and an array that has
+not been evaluated yet is work queued on one of those streams: only that
+thread can evaluate it. Anywhere else raises
 
     RuntimeError: There is no Stream(gpu, 1) in current thread.
 
-Streamlit runs every rerun on a fresh ScriptRunner thread, so importing
-mlx-vlm from page code works exactly once and then fails on the next
-interaction. Pinning the import *and* all later calls to a single worker
-sidesteps it entirely.
+mlx-vlm's ``load()`` leaves arrays like that behind. It evaluates
+``model.parameters()``, which skips underscore-named attributes, so the text
+model's shared ``rotary_embeddings["sliding_attention"]._inv_freq`` stays
+pending until the first forward pass reads it. Streamlit starts a fresh
+ScriptRunner thread for each rerun the browser requests, and
+``st.cache_resource`` loads on whichever rerun asks first, so page code that
+drives mlx-vlm directly fails on its first reply. Running the import, the load
+and every later call on a single worker means nothing pending ever changes
+threads.
 
 The arrangement pays for itself twice over: MLX generation is not reentrant,
 so funnelling every session through one worker also stops two browser tabs
@@ -42,7 +43,7 @@ _PUT_TIMEOUT = 0.1
 
 
 def _import_mlx() -> None:
-    """First touch of mlx-vlm, executed on the worker so it owns the stream."""
+    """First touch of mlx-vlm, on the worker, so import-time MLX work is too."""
     import mlx_vlm  # noqa: F401
 
 

@@ -7,9 +7,11 @@ research studio wants. Quantised conversions exist upstream if the footprint
 ever needs to come down.
 
 Every mlx-vlm import in this module is deliberately function-local and runs on
-the worker thread from ``nmv.runtime``. Hoisting one to module scope would bind
-mlx-vlm's thread-local GPU stream to a Streamlit ScriptRunner thread and break
-generation on the next rerun.
+the worker thread from ``nmv.runtime``. MLX evaluates an array only on the
+thread that queued it, and ``load()`` leaves some pending, so a model loaded on
+one Streamlit rerun cannot give its first answer on the next — that module has
+the details. Hoisting an import to module scope would run it on a ScriptRunner
+thread, and calls tend to follow their imports.
 """
 
 from __future__ import annotations

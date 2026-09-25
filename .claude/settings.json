@@ -10,7 +10,7 @@
           },
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" || exit 0; hits=$(grep -rnE --include='*.py' '^from mlx_vlm|^import mlx_vlm|^from mlx\\.|^import mlx\\b' nmv/ app_pages/ streamlit_app.py) || exit 0; printf 'Module-scope MLX import detected. CLAUDE.md invariant: mlx-vlm is imported only inside worker functions, never at module scope (mlx_vlm binds its generation_stream to the importing thread; Streamlit reruns on a fresh thread). Move the import into the function body.\\n%s\\n' \"$hits\" >&2; exit 2"
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" || exit 0; hits=$(grep -rnE --include='*.py' '^(from|import) mlx(_vlm)?\\b' nmv/ app_pages/ streamlit_app.py) || exit 0; printf 'Module-scope MLX import detected. CLAUDE.md invariant: mlx-vlm is imported only inside worker functions, never at module scope (MLX evaluates an array only on the thread that queued it, so all MLX work, imports included, stays on the nmv.runtime worker; Streamlit reruns on a fresh thread). Move the import into the function body.\\n%s\\n' \"$hits\" >&2; exit 2"
           }
         ]
       }

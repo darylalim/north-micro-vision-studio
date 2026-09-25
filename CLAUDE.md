@@ -81,26 +81,39 @@ names `uv lock` without connecting it to the version you just changed.
 
 ## The constraint that shapes the architecture
 
-mlx-vlm builds its generation stream at import time:
+MLX binds each thread's default stream, like any made with `mx.new_stream`, to that
+thread, and an array that has not been evaluated yet is work queued on one of those
+streams. Only that thread can evaluate it; anywhere else raises
+`RuntimeError: There is no Stream(gpu, N) in current thread.` (N is 1 in this app).
+Arrays that have been evaluated are plain data and cross threads freely.
 
-```python
-# mlx_vlm/generate/common.py:35
-generation_stream = mx.new_thread_local_stream(mx.default_device())
-```
+mlx-vlm's `load()` leaves some of the model unevaluated. It calls
+`mx.eval(model.parameters())`, but `parameters()` skips underscore-named attributes, so
+30 rotary `_inv_freq` tables stay pending: a copy in each of the 28 language-model
+layers, which the forward pass never reads, and one per attention type in
+`language_model.model.rotary_embeddings`. The forward pass reads
+`rotary_embeddings["sliding_attention"]`, so the first one has to run on the thread that
+loaded the model; once it has, any thread can generate. Streamlit starts a fresh
+ScriptRunner thread for each rerun the browser requests (`st.rerun()` and
+`st.switch_page()` stay on the current one), and `st.cache_resource` loads during
+whichever rerun asks first, normally the page's initial render. So a naive app fails on
+its very first reply, and on every reply after it.
 
-That stream belongs to whichever thread **first imported** the package. Streamlit runs
-every rerun on a fresh ScriptRunner thread, so a naive app works exactly once and then
-fails with `RuntimeError: There is no Stream(gpu, 1) in current thread.`
+The suspect the name invites, `generation_stream` in `mlx_vlm/generate/common.py`, is
+innocent: it is a `ThreadLocalStream`, which hands each thread a stream of its own.
 
-`nmv/runtime.py` pins the import *and* every later MLX call to one long-lived worker
-thread, streaming tokens back over a bounded queue. It also serialises GPU work across
-browser tabs, which matters because MLX generation is not reentrant.
+`nmv/runtime.py` runs the import, the load and every later MLX call on one long-lived
+worker thread, streaming tokens back over a bounded queue, so nothing pending ever
+changes threads. It also serialises GPU work across browser tabs, which matters because
+MLX generation is not reentrant.
 
 **Invariant: mlx-vlm is imported only inside worker functions, never at module scope.**
-Check it before committing:
+Importing on the worker keeps anything mlx-vlm queues at import time on the thread that
+will evaluate it, and a module-scope import in page code is where direct, off-worker
+calls begin. Check it before committing — the same pattern CI and the edit hook use:
 
 ```bash
-grep -rn --include='*.py' "^from mlx_vlm\|^import mlx_vlm\|^from mlx\." nmv/ app_pages/ streamlit_app.py
+grep -rnE --include='*.py' '^(from|import) mlx(_vlm)?\b' nmv/ app_pages/ streamlit_app.py
 ```
 
 That must return nothing.

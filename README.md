@@ -108,29 +108,30 @@ Two traps this codebase handles and you should keep handling:
 
 ### MLX streams are thread-local — this shapes the whole architecture
 
-mlx-vlm creates its generation stream at import time:
+MLX binds each thread's default stream to that thread, and an array that has not been
+evaluated yet is work queued on one of those streams, so only that thread can evaluate
+it. mlx-vlm's `load()` evaluates the model's parameters but not the arrays it keeps under
+underscore names, and the text model's shared rotary `_inv_freq` table is one of them: it
+stays pending until the first forward pass reads it, so that pass has to run on the
+thread that loaded the model.
 
-```python
-# mlx_vlm/generate/common.py
-generation_stream = mx.new_thread_local_stream(mx.default_device())
-```
-
-That stream belongs to whichever thread first imported the package. Streamlit runs
-**every rerun on a fresh ScriptRunner thread**, so a naive app works exactly once and
-then dies with:
+Streamlit starts **a fresh ScriptRunner thread for each rerun the browser requests**, and
+`st.cache_resource` loads the model during the page's first render. So in a naive app the
+first reply, and every one after it, dies with:
 
 ```text
 RuntimeError: There is no Stream(gpu, 1) in current thread.
 ```
 
-`nmv/runtime.py` fixes this by pinning the import *and* every subsequent MLX call to one
-long-lived worker thread, streaming tokens back over a bounded queue. It also serialises
-GPU work across browser tabs, which matters because MLX generation is not reentrant.
+`nmv/runtime.py` fixes this by running the import, the load and every later MLX call on
+one long-lived worker thread, streaming tokens back over a bounded queue. It also
+serialises GPU work across browser tabs, which matters because MLX generation is not
+reentrant.
 
 **The invariant:** mlx-vlm is imported only inside worker functions, never at module
-scope. `nmv/imaging.py` therefore mirrors mlx-vlm's `smart_resize` as plain arithmetic
-instead of importing it; `tests/test_resize_parity.py` asserts the copy stays identical
-to upstream.
+scope, so anything it queues at import time lands on the worker too. `nmv/imaging.py`
+therefore mirrors mlx-vlm's `smart_resize` as plain arithmetic instead of importing it;
+`tests/test_resize_parity.py` asserts the copy stays identical to upstream.
 
 ### The model's own limits
 

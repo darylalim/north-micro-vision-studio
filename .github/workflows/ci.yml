@@ -47,15 +47,16 @@ jobs:
       - name: Type check
         run: uv run ty check
 
-      # The invariant the whole architecture rests on: mlx-vlm binds its
-      # thread-local GPU stream to whichever thread imports it, so it may only
-      # be imported inside worker functions. A module-scope import works once
-      # and then dies on Streamlit's next rerun. A local hook catches this while
-      # editing; this catches it in a pull request.
+      # The invariant the whole architecture rests on: MLX evaluates an array
+      # only on the thread that queued it, so mlx-vlm is imported and driven
+      # only on the nmv/runtime.py worker. A module-scope import runs on a
+      # Streamlit ScriptRunner thread instead, and is where direct calls from
+      # page code begin. A local hook catches this while editing; this catches
+      # it in a pull request.
       - name: No module-scope MLX imports
         run: |
           if grep -rnE --include='*.py' \
-            '^from mlx_vlm|^import mlx_vlm|^from mlx\.|^import mlx\b' \
+            '^(from|import) mlx(_vlm)?\b' \
             nmv/ app_pages/ streamlit_app.py
           then
             echo "::error::Module-scope MLX import detected -- move it into the function body (see CLAUDE.md)."

@@ -7,10 +7,11 @@ capping area is the only lever on prefill latency and KV-cache memory.
 
 One token covers a 32x32 px block, so ``tokens == pixels / 1024``.
 
-This module is deliberately free of any mlx-vlm import. mlx-vlm binds a
-thread-local GPU stream the moment it is imported, so it may only ever be
-imported on the worker thread (see ``nmv.runtime``); keeping the geometry here
-as plain arithmetic removes the hazard of a page pulling it in first.
+This module is deliberately free of any mlx-vlm import. Pages call it on
+Streamlit's ScriptRunner threads, while mlx-vlm is imported and driven only on
+the worker, so that any MLX work it queues is evaluated on the thread that
+built it (see ``nmv.runtime``). Keeping the geometry here as plain arithmetic
+means no page ever has a reason to pull mlx-vlm in.
 ``smart_resize`` therefore mirrors mlx-vlm's implementation rather than
 importing it — ``tests/test_resize_parity.py`` asserts the two stay identical.
 """
